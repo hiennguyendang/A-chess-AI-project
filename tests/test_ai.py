@@ -30,9 +30,10 @@ def test_board_push_and_pop_restores_state():
 
 
 def test_evaluator_checkmate_score_sign():
-    board = chess.Board("6k1/5Q2/6K1/8/8/8/8/8 b - - 0 1")
+    # Black to move in a checkmated position.
+    board = chess.Board("7k/6Q1/6K1/8/8/8/8/8 b - - 0 1")
     score = Evaluator.evaluate(board)
-    assert score < 0
+    assert score > 0
 
 
 def test_ai_returns_legal_move_in_middle_game():
