@@ -19,8 +19,6 @@ It supports human play, AI vs AI automation, and 10-board benchmark windows for 
 5. 10-game benchmark windows for:
    1. Minimax vs Random
    2. MCTS vs Random
-6. Custom piece sprites loaded from `imgs/piece`
-7. End-of-game overlay text in the board center: `White win`, `Black win`, or `Draw`
 
 ## Project Structure
 
@@ -33,8 +31,6 @@ A-chess-AI-project/
     utils.py
   config/
     settings.py
-  docs/
-    report.md
   engine/
     board.py
     evaluator.py
@@ -45,10 +41,6 @@ A-chess-AI-project/
     benchmark_window.py
     board_ui.py
     themes.py
-  imgs/
-    piece/
-      bb.png bk.png bn.png bp.png bq.png br.png
-      wb.png wk.png wn.png wp.png wq.png wr.png
   tests/
     test_ai.py
     test_ai_vs_random.py
@@ -149,55 +141,6 @@ You will see:
 2. Status text (`Turn`, `Checkmate`, `Stalemate`)
 3. Move history in SAN format
 4. Control buttons (`Start/Stop AI vs AI`, `Restart Game`, `Back To Menu`)
-
-When a game ends, a large yellow message appears at the center of the board:
-
-1. `White win`
-2. `Black win`
-3. `Draw`
-
-## Piece Assets
-
-The UI loads piece images from `imgs/piece` using this naming convention:
-
-1. White: `wp`, `wn`, `wb`, `wr`, `wq`, `wk`
-2. Black: `bp`, `bn`, `bb`, `br`, `bq`, `bk`
-
-If a sprite is missing, the board falls back to Unicode rendering.
-
-## Testing
-
-Run all tests:
-
-```bash
-pytest -q
-```
-
-Run only core smoke tests:
-
-```bash
-pytest -q tests/test_ai.py
-```
-
-Run benchmark tests:
-
-```bash
-pytest -q tests/test_ai_vs_random.py
-```
-
-Enable strict benchmark checks (10/10 wins expected):
-
-```bash
-# PowerShell
-$env:STRICT_RANDOM_BENCH = "1"
-pytest -q tests/test_ai_vs_random.py
-```
-
-```bash
-# cmd
-set STRICT_RANDOM_BENCH=1
-pytest -q tests/test_ai_vs_random.py
-```
 
 ## Notes
 
