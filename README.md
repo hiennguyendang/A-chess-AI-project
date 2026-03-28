@@ -1,87 +1,209 @@
-# ♟️ Chess AI Project – Alpha-Beta & MCTS
+# Chess AI Project (Alpha-Beta and MCTS)
 
-This project is developed as part of the *Introduction to Artificial Intelligence (CO3061)* course at HCMUT.
+This project is a desktop chess application with a PyQt5 interface and two AI engines:
 
-It implements a fully functional Chess game with an interactive graphical user interface (GUI), featuring two core AI algorithms:
+1. Alpha-Beta (Minimax with pruning)
+2. Monte Carlo Tree Search (MCTS)
 
-* **Alpha-Beta Pruning (Minimax optimized)**
-* **Monte Carlo Tree Search (MCTS)**
+It supports human play, AI vs AI automation, and 10-board benchmark windows for quick engine comparison.
 
-The system allows users to play against AI, compare different algorithms, and adjust difficulty levels dynamically.
+## Highlights
 
----
+1. Full legal chess gameplay with move validation and check/checkmate/stalemate detection
+2. Two AI engines: Alpha-Beta and MCTS
+3. Layered UI flow:
+   1. Step 1: choose game mode
+   2. Step 2: mode-specific options
+   3. In-game: board + status + move history
+4. AI vs AI with separate depth control for White and Black
+5. 10-game benchmark windows for:
+   1. Minimax vs Random
+   2. MCTS vs Random
+6. Custom piece sprites loaded from `imgs/piece`
+7. End-of-game overlay text in the board center: `White win`, `Black win`, or `Draw`
 
-## 🚀 Features
+## Project Structure
 
-* ♟️ Full Chess gameplay with legal move generation
-* 🧠 Two AI agents:
-
-  * Alpha-Beta with configurable search depth
-  * MCTS with configurable simulation count
-* ⚖️ AI vs AI comparison mode
-* 🎮 Interactive GUI (inspired by chess.com)
-* 🎚️ Adjustable difficulty settings
-* 🔄 Real-time gameplay interaction
-
----
-
-## 🧠 AI Algorithms
-
-### Alpha-Beta Pruning
-
-An optimized version of the Minimax algorithm that reduces the number of nodes evaluated in the game tree by pruning branches that cannot affect the final decision.
-
-### Monte Carlo Tree Search (MCTS)
-
-A probabilistic search algorithm that uses random simulations to evaluate moves and progressively improve decision-making over time.
-
----
-
-## 🏗️ Project Structure
-
-```bash
-chess-ai-project/
-├── engine/        # Chess logic (rules, board, evaluation)
-├── ai/            # AI algorithms (Alpha-Beta, MCTS)
-├── gui/           # User interface
-├── config/        # Settings (difficulty, modes)
-├── tests/         # Testing
-├── docs/          # Report & documentation
-└── main.py        # Entry point
+```text
+A-chess-AI-project/
+  ai/
+    alphabeta.py
+    mcts.py
+    minimax.py
+    utils.py
+  config/
+    settings.py
+  docs/
+    report.md
+  engine/
+    board.py
+    evaluator.py
+    move_generator.py
+    rules.py
+  gui/
+    app.py
+    benchmark_window.py
+    board_ui.py
+    themes.py
+  imgs/
+    piece/
+      bb.png bk.png bn.png bp.png bq.png br.png
+      wb.png wk.png wn.png wp.png wq.png wr.png
+  tests/
+    test_ai.py
+    test_ai_vs_random.py
+  main.py
+  requirements.txt
 ```
 
----
+## Requirements
 
-## 🎯 Objectives
+1. Python 3.11+ (Python 3.12 recommended)
+2. pip
 
-* Apply AI search algorithms to a complex game (Chess)
-* Compare deterministic vs probabilistic approaches
-* Analyze performance, speed, and decision quality
+Dependencies are listed in `requirements.txt`:
 
----
+1. python-chess
+2. PyQt5
+3. numpy
 
-## 📊 Comparison Goals
+## Installation
 
-* Execution time
-* Number of explored nodes / simulations
-* Quality of moves
+From the project root:
 
----
+```bash
+python -m venv .venv
+```
 
-## 🛠️ Tech Stack
+### Windows (PowerShell)
 
-* Python
-* PyQt5 / Pygame (GUI)
-* python-chess (optional)
+```bash
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
 
----
+### Windows (cmd)
 
-## 👥 Contributors
+```bash
+.venv\Scripts\activate.bat
+pip install -r requirements.txt
+```
 
-* [Your Name / Team Members]
+### macOS/Linux
 
----
+```bash
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 
-## 📄 License
+## Run the Application
 
-This project is for academic purposes.
+```bash
+python main.py
+```
+
+## How to Use
+
+### 1) Start Menu (Mode Selection)
+
+Choose one of these modes, then click `Continue`:
+
+1. Human vs AI
+2. AI vs AI
+3. Test Alpha-Beta (10 games)
+4. Test Monte Carlo (10 games)
+
+### 2) Options (Mode-Specific)
+
+The options screen is dynamic and only shows relevant controls.
+
+#### Human vs AI
+
+1. AI Depth
+2. Your Side (White/Black)
+3. AI Engine (Alpha-Beta/MCTS)
+
+Click `Start Game`.
+
+#### AI vs AI
+
+1. White AI (Alpha-Beta/MCTS)
+2. White AI Depth
+3. Black AI (Alpha-Beta/MCTS)
+4. Black AI Depth
+
+Click `Start Game`.
+
+#### Test Modes
+
+1. Test Alpha-Beta (10 boards): uses selected depth for Minimax benchmark
+2. Test Monte Carlo (10 boards): opens MCTS benchmark window
+
+Click `Open Test`.
+
+### 3) In-Game Screen
+
+You will see:
+
+1. Chess board
+2. Status text (`Turn`, `Checkmate`, `Stalemate`)
+3. Move history in SAN format
+4. Control buttons (`Start/Stop AI vs AI`, `Restart Game`, `Back To Menu`)
+
+When a game ends, a large yellow message appears at the center of the board:
+
+1. `White win`
+2. `Black win`
+3. `Draw`
+
+## Piece Assets
+
+The UI loads piece images from `imgs/piece` using this naming convention:
+
+1. White: `wp`, `wn`, `wb`, `wr`, `wq`, `wk`
+2. Black: `bp`, `bn`, `bb`, `br`, `bq`, `bk`
+
+If a sprite is missing, the board falls back to Unicode rendering.
+
+## Testing
+
+Run all tests:
+
+```bash
+pytest -q
+```
+
+Run only core smoke tests:
+
+```bash
+pytest -q tests/test_ai.py
+```
+
+Run benchmark tests:
+
+```bash
+pytest -q tests/test_ai_vs_random.py
+```
+
+Enable strict benchmark checks (10/10 wins expected):
+
+```bash
+# PowerShell
+$env:STRICT_RANDOM_BENCH = "1"
+pytest -q tests/test_ai_vs_random.py
+```
+
+```bash
+# cmd
+set STRICT_RANDOM_BENCH=1
+pytest -q tests/test_ai_vs_random.py
+```
+
+## Notes
+
+1. Some Windows environments may show Qt EUDC font warnings; this does not block the app.
+2. Performance depends on selected depth/simulations and CPU speed.
+
+## License
+
+This repository is intended for educational/academic use.

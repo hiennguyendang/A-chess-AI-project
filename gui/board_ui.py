@@ -1,6 +1,7 @@
 """Board UI widget using PyQt5."""
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Callable, List, Optional, Tuple
 
 import chess
@@ -36,6 +37,7 @@ class BoardWidget(QtWidgets.QWidget):
         theme: Theme,
         move_made_callback: Callable[[str], None],
         can_human_move: Callable[[], bool],
+        min_size: int = 480,
     ):
         super().__init__()
         self.board = board
@@ -44,7 +46,8 @@ class BoardWidget(QtWidgets.QWidget):
         self.can_human_move = can_human_move
         self.selected_square: Optional[Square] = None
         self.highlight_targets: List[Square] = []
-        self.setMinimumSize(480, 480)
+        self.piece_pixmaps = self._load_piece_pixmaps()
+        self.setMinimumSize(min_size, min_size)
 
     def set_board(self, board: Board) -> None:
         self.board = board
@@ -96,13 +99,20 @@ class BoardWidget(QtWidgets.QWidget):
         painter = QtGui.QPainter(self)
         size = min(self.width(), self.height())
         square_size = size / 8
+        coord_font = QtGui.QFont("Segoe UI", max(9, int(square_size * 0.17)))
 
         for file in range(8):
             for rank in range(8):
                 color = self.theme.light_square if (file + rank) % 2 == 0 else self.theme.dark_square
                 if self.selected_square == (file, rank):
                     color = self.theme.highlight
-                painter.fillRect(file * square_size, (7 - rank) * square_size, square_size, square_size, QtGui.QColor(color))
+                square_rect = QtCore.QRectF(
+                    file * square_size,
+                    (7 - rank) * square_size,
+                    square_size,
+                    square_size,
+                )
+                painter.fillRect(square_rect, QtGui.QColor(color))
 
                 if (file, rank) in self.highlight_targets:
                     painter.setBrush(QtGui.QColor(self.theme.move_hint))
@@ -112,19 +122,116 @@ class BoardWidget(QtWidgets.QWidget):
                     radius = square_size * 0.12
                     painter.drawEllipse(QtCore.QPointF(center_x, center_y), radius, radius)
 
-                piece = self._piece_symbol_at(file, rank)
-                if piece:
-                    painter.setFont(QtGui.QFont("Segoe UI Symbol", int(square_size / 2.1)))
-                    painter.setPen(QtGui.QColor(self.theme.piece_color))
-                    painter.drawText(QtCore.QRectF(file * square_size, (7 - rank) * square_size, square_size, square_size),
-                                     QtCore.Qt.AlignCenter, piece)
+                piece = self._piece_at(file, rank)
+                if piece is not None:
+                    if not self._draw_piece_image(painter, piece, file, rank, square_size):
+                        piece_symbol = UNICODE_PIECES[piece.symbol()]
+                        self._draw_piece_fallback(painter, piece_symbol, file, rank, square_size)
 
-    def _piece_symbol_at(self, file: int, rank: int) -> str:
+                if rank == 0:
+                    painter.setFont(coord_font)
+                    painter.setPen(QtGui.QColor(self.theme.coord_dark if (file + rank) % 2 == 0 else self.theme.coord_light))
+                    file_char = chr(ord("a") + file)
+                    painter.drawText(
+                        QtCore.QRectF(file * square_size + square_size * 0.76, (7 - rank) * square_size + square_size * 0.80, square_size * 0.2, square_size * 0.2),
+                        QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop,
+                        file_char,
+                    )
+
+                if file == 0:
+                    painter.setFont(coord_font)
+                    painter.setPen(QtGui.QColor(self.theme.coord_dark if (file + rank) % 2 == 0 else self.theme.coord_light))
+                    rank_char = str(rank + 1)
+                    painter.drawText(
+                        QtCore.QRectF(file * square_size + square_size * 0.06, (7 - rank) * square_size + square_size * 0.04, square_size * 0.2, square_size * 0.2),
+                        QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop,
+                        rank_char,
+                    )
+
+        result_text = self._game_result_text()
+        if result_text:
+            board_rect = QtCore.QRectF(0, 0, size, size)
+            painter.fillRect(board_rect, QtGui.QColor(0, 0, 0, 88))
+
+            result_font = QtGui.QFont("Segoe UI", max(24, int(square_size * 0.72)))
+            result_font.setBold(True)
+            painter.setFont(result_font)
+
+            # Draw a dark shadow first so yellow text remains readable on any square color.
+            painter.setPen(QtGui.QColor(20, 20, 20, 230))
+            painter.drawText(board_rect.translated(2.0, 2.0), QtCore.Qt.AlignCenter, result_text)
+            painter.setPen(QtGui.QColor("#F5D547"))
+            painter.drawText(board_rect, QtCore.Qt.AlignCenter, result_text)
+
+    def _piece_at(self, file: int, rank: int) -> Optional[chess.Piece]:
         sq = chess.square(file, rank)
-        piece = self.board.to_python_chess().piece_at(sq)
-        if piece is None:
+        return self.board.to_python_chess().piece_at(sq)
+
+    def _load_piece_pixmaps(self) -> dict[str, QtGui.QPixmap]:
+        base_dir = Path(__file__).resolve().parent.parent / "imgs" / "piece"
+        pixmaps: dict[str, QtGui.QPixmap] = {}
+        keys = ["wp", "wn", "wb", "wr", "wq", "wk", "bp", "bn", "bb", "br", "bq", "bk"]
+        for key in keys:
+            file_path = base_dir / f"{key}.png"
+            if not file_path.exists():
+                continue
+            pixmap = QtGui.QPixmap(str(file_path))
+            if not pixmap.isNull():
+                pixmaps[key] = pixmap
+        return pixmaps
+
+    def _piece_key(self, piece: chess.Piece) -> str:
+        color = "w" if piece.color == chess.WHITE else "b"
+        return f"{color}{piece.symbol().lower()}"
+
+    def _draw_piece_image(
+        self,
+        painter: QtGui.QPainter,
+        piece: chess.Piece,
+        file: int,
+        rank: int,
+        square_size: float,
+    ) -> bool:
+        key = self._piece_key(piece)
+        pixmap = self.piece_pixmaps.get(key)
+        if pixmap is None:
+            return False
+
+        target_size = int(square_size * 0.86)
+        if target_size <= 0:
+            return False
+
+        x = int(file * square_size + (square_size - target_size) / 2)
+        y = int((7 - rank) * square_size + (square_size - target_size) / 2)
+        target_rect = QtCore.QRect(x, y, target_size, target_size)
+        scaled = pixmap.scaled(target_size, target_size, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+        painter.drawPixmap(target_rect, scaled)
+        return True
+
+    def _draw_piece_fallback(
+        self,
+        painter: QtGui.QPainter,
+        piece_symbol: str,
+        file: int,
+        rank: int,
+        square_size: float,
+    ) -> None:
+        piece_font = QtGui.QFont("Segoe UI Symbol", int(square_size / 2.0))
+        piece_font.setStyleStrategy(QtGui.QFont.PreferAntialias)
+        piece_rect = QtCore.QRectF(file * square_size, (7 - rank) * square_size, square_size, square_size)
+        painter.setFont(piece_font)
+        painter.setPen(QtGui.QColor(self.theme.black_piece))
+        painter.drawText(piece_rect, QtCore.Qt.AlignCenter, piece_symbol)
+
+    def _game_result_text(self) -> str:
+        board = self.board.to_python_chess()
+        if not board.is_game_over():
             return ""
-        return UNICODE_PIECES[piece.symbol()]
+
+        if board.is_checkmate():
+            winner = "Black" if board.turn == chess.WHITE else "White"
+            return f"{winner} win"
+        return "Draw"
 
     @staticmethod
     def _square_to_uci(src: Square, dst: Square) -> str:
