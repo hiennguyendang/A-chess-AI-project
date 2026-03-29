@@ -62,10 +62,17 @@ class BoardWidget(QtWidgets.QWidget):
         if not self.can_human_move():
             return
 
-        size = min(self.width(), self.height())
-        square_size = size / 8
-        file = int(event.x() // square_size)
-        rank = 7 - int(event.y() // square_size)
+        board_rect, square_size, _ = self._board_geometry()
+        if square_size <= 0:
+            return
+
+        if not board_rect.contains(event.x(), event.y()):
+            return
+
+        rel_x = event.x() - board_rect.left()
+        rel_y = event.y() - board_rect.top()
+        file = int(rel_x // square_size)
+        rank = 7 - int(rel_y // square_size)
 
         if file < 0 or file > 7 or rank < 0 or rank > 7:
             return
@@ -97,9 +104,15 @@ class BoardWidget(QtWidgets.QWidget):
 
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:  # pragma: no cover - UI drawing
         painter = QtGui.QPainter(self)
-        size = min(self.width(), self.height())
-        square_size = size / 8
+        board_rect, square_size, _ = self._board_geometry()
+        if square_size <= 0:
+            return
+
+        board_left = board_rect.left()
+        board_top = board_rect.top()
         coord_font = QtGui.QFont("Segoe UI", max(9, int(square_size * 0.17)))
+        coord_font.setBold(True)
+        painter.setFont(coord_font)
 
         for file in range(8):
             for rank in range(8):
@@ -107,8 +120,8 @@ class BoardWidget(QtWidgets.QWidget):
                 if self.selected_square == (file, rank):
                     color = self.theme.highlight
                 square_rect = QtCore.QRectF(
-                    file * square_size,
-                    (7 - rank) * square_size,
+                    board_left + file * square_size,
+                    board_top + (7 - rank) * square_size,
                     square_size,
                     square_size,
                 )
@@ -117,40 +130,45 @@ class BoardWidget(QtWidgets.QWidget):
                 if (file, rank) in self.highlight_targets:
                     painter.setBrush(QtGui.QColor(self.theme.move_hint))
                     painter.setPen(QtCore.Qt.NoPen)
-                    center_x = file * square_size + square_size / 2
-                    center_y = (7 - rank) * square_size + square_size / 2
+                    center_x = board_left + file * square_size + square_size / 2
+                    center_y = board_top + (7 - rank) * square_size + square_size / 2
                     radius = square_size * 0.12
                     painter.drawEllipse(QtCore.QPointF(center_x, center_y), radius, radius)
 
                 piece = self._piece_at(file, rank)
                 if piece is not None:
-                    if not self._draw_piece_image(painter, piece, file, rank, square_size):
+                    if not self._draw_piece_image(painter, piece, file, rank, square_size, board_left, board_top):
                         piece_symbol = UNICODE_PIECES[piece.symbol()]
-                        self._draw_piece_fallback(painter, piece_symbol, file, rank, square_size)
+                        self._draw_piece_fallback(painter, piece_symbol, file, rank, square_size, board_left, board_top)
 
+                # Draw coordinate labels inside edge squares (as in the reference).
+                is_light_square = (file + rank) % 2 == 0
+                coord_color = self.theme.coord_dark if is_light_square else self.theme.coord_light
+                painter.setPen(QtGui.QColor(coord_color))
+
+                inset = square_size * 0.08
                 if rank == 0:
-                    painter.setFont(coord_font)
-                    painter.setPen(QtGui.QColor(self.theme.coord_dark if (file + rank) % 2 == 0 else self.theme.coord_light))
                     file_char = chr(ord("a") + file)
-                    painter.drawText(
-                        QtCore.QRectF(file * square_size + square_size * 0.76, (7 - rank) * square_size + square_size * 0.80, square_size * 0.2, square_size * 0.2),
-                        QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop,
-                        file_char,
+                    file_rect = QtCore.QRectF(
+                        board_left + file * square_size,
+                        board_top + (7 - rank) * square_size,
+                        square_size - inset,
+                        square_size - inset,
                     )
+                    painter.drawText(file_rect, QtCore.Qt.AlignRight | QtCore.Qt.AlignBottom, file_char)
 
                 if file == 0:
-                    painter.setFont(coord_font)
-                    painter.setPen(QtGui.QColor(self.theme.coord_dark if (file + rank) % 2 == 0 else self.theme.coord_light))
                     rank_char = str(rank + 1)
-                    painter.drawText(
-                        QtCore.QRectF(file * square_size + square_size * 0.06, (7 - rank) * square_size + square_size * 0.04, square_size * 0.2, square_size * 0.2),
-                        QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop,
-                        rank_char,
+                    rank_rect = QtCore.QRectF(
+                        board_left + file * square_size + inset,
+                        board_top + (7 - rank) * square_size,
+                        square_size - inset,
+                        square_size - inset,
                     )
+                    painter.drawText(rank_rect, QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop, rank_char)
 
         result_text = self._game_result_text()
         if result_text:
-            board_rect = QtCore.QRectF(0, 0, size, size)
             painter.fillRect(board_rect, QtGui.QColor(0, 0, 0, 88))
 
             result_font = QtGui.QFont("Segoe UI", max(24, int(square_size * 0.72)))
@@ -191,6 +209,8 @@ class BoardWidget(QtWidgets.QWidget):
         file: int,
         rank: int,
         square_size: float,
+        board_left: float,
+        board_top: float,
     ) -> bool:
         key = self._piece_key(piece)
         pixmap = self.piece_pixmaps.get(key)
@@ -201,8 +221,8 @@ class BoardWidget(QtWidgets.QWidget):
         if target_size <= 0:
             return False
 
-        x = int(file * square_size + (square_size - target_size) / 2)
-        y = int((7 - rank) * square_size + (square_size - target_size) / 2)
+        x = int(board_left + file * square_size + (square_size - target_size) / 2)
+        y = int(board_top + (7 - rank) * square_size + (square_size - target_size) / 2)
         target_rect = QtCore.QRect(x, y, target_size, target_size)
         scaled = pixmap.scaled(target_size, target_size, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
         painter.drawPixmap(target_rect, scaled)
@@ -215,13 +235,31 @@ class BoardWidget(QtWidgets.QWidget):
         file: int,
         rank: int,
         square_size: float,
+        board_left: float,
+        board_top: float,
     ) -> None:
         piece_font = QtGui.QFont("Segoe UI Symbol", int(square_size / 2.0))
         piece_font.setStyleStrategy(QtGui.QFont.PreferAntialias)
-        piece_rect = QtCore.QRectF(file * square_size, (7 - rank) * square_size, square_size, square_size)
+        piece_rect = QtCore.QRectF(
+            board_left + file * square_size,
+            board_top + (7 - rank) * square_size,
+            square_size,
+            square_size,
+        )
         painter.setFont(piece_font)
         painter.setPen(QtGui.QColor(self.theme.black_piece))
         painter.drawText(piece_rect, QtCore.Qt.AlignCenter, piece_symbol)
+
+    def _board_geometry(self) -> Tuple[QtCore.QRectF, float, float]:
+        outer_margin = max(2.0, min(self.width(), self.height()) * 0.01)
+        board_size = min(self.width() - outer_margin * 2, self.height() - outer_margin * 2)
+        if board_size <= 0:
+            return QtCore.QRectF(), 0.0, outer_margin
+
+        board_left = (self.width() - board_size) / 2
+        board_top = (self.height() - board_size) / 2
+        board_rect = QtCore.QRectF(board_left, board_top, board_size, board_size)
+        return board_rect, board_size / 8, outer_margin
 
     def _game_result_text(self) -> str:
         board = self.board.to_python_chess()

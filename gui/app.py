@@ -340,13 +340,13 @@ class MainWindow(QtWidgets.QMainWindow):
             QMainWindow {{ background-color: {self.theme.app_bg}; }}
             QWidget {{ color: {self.theme.text_primary}; font-size: 13px; }}
             QFrame#mode_card, QFrame#options_card {{
-                background: {self.theme.panel_bg};
-                border: 1px solid {self.theme.accent};
+                background: #2A2143;
+                border: 1px solid #8D7ACF;
                 border-radius: 12px;
             }}
             QLabel#menu_title {{ font-size: 28px; font-weight: 700; color: {self.theme.text_primary}; }}
-            QLabel#menu_subtitle {{ color: {self.theme.text_muted}; font-size: 14px; }}
-            QLabel#menu_hint {{ color: {self.theme.text_muted}; background: {self.theme.panel_bg}; padding: 8px; border-radius: 6px; }}
+            QLabel#menu_subtitle {{ color: #D8D1F4; font-size: 14px; }}
+            QLabel#menu_hint {{ color: #D8D1F4; background: #35295A; border: 1px solid #5F4D9A; padding: 8px; border-radius: 6px; }}
             QLabel#title {{ font-size: 18px; font-weight: 700; color: {self.theme.text_primary}; }}
             QLabel#status {{ color: {self.theme.text_muted}; background: {self.theme.panel_bg}; padding: 8px; border-radius: 6px; }}
             QLabel#history_title {{ font-size: 15px; font-weight: 600; }}
@@ -363,39 +363,40 @@ class MainWindow(QtWidgets.QMainWindow):
                 padding: 6px;
             }}
             QFrame#options_card QComboBox, QFrame#options_card QSpinBox {{
-                background: #FFFFFF;
-                color: #111111;
-                border: 1px solid #CFCFCF;
+                background: #ECE8FA;
+                color: #281F47;
+                border: 1px solid #C7B9F1;
             }}
             QFrame#options_card QComboBox QAbstractItemView {{
-                background: #FFFFFF;
-                color: #111111;
-                selection-background-color: #E6E6E6;
-                selection-color: #111111;
+                background: #F2EEFF;
+                color: #281F47;
+                selection-background-color: #DCD1FA;
+                selection-color: #281F47;
             }}
             QComboBox#menu_mode_big {{
                 min-height: 54px;
                 font-size: 17px;
                 font-weight: 600;
-                background: #FFFFFF;
-                color: #111111;
-                border: 2px solid #CFCFCF;
+                background: #ECE8FA;
+                color: #281F47;
+                border: 2px solid #C7B9F1;
                 padding-left: 14px;
             }}
             QComboBox#menu_mode_big QAbstractItemView {{
-                background: #FFFFFF;
-                color: #111111;
-                selection-background-color: #E6E6E6;
-                selection-color: #111111;
+                background: #F2EEFF;
+                color: #281F47;
+                selection-background-color: #DCD1FA;
+                selection-color: #281F47;
             }}
             QPushButton#mode_continue_btn {{
                 min-height: 50px;
                 font-size: 17px;
                 font-weight: 700;
-                background: #B7CC82;
-                color: #152214;
-                border: 2px solid #DCE8B9;
+                background: #7E66C8;
+                color: #F7F4FF;
+                border: 2px solid #B9A7F0;
              }}
+             QPushButton#mode_continue_btn:hover {{ background: #6E58B2; color: #FFFFFF; }}
              QPlainTextEdit#history_box {{ font-family: Consolas; font-size: 13px; }}
              QPushButton:hover {{ background: {self.theme.accent}; color: #111; }}
              """

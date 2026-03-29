@@ -41,16 +41,16 @@ class Theme:
 
     @staticmethod
     def chesscom() -> "Theme":
-        # Close to chess.com board tones while keeping app panel readable.
+        # Lavender-gray board palette matching the requested style.
         return Theme(
-            light_square="#EEEED2",
-            dark_square="#769656",
+            light_square="#E2E4EA",
+            dark_square="#8277B9",
             highlight="#F6F669",
-            move_hint="#D6DE8A",
+            move_hint="#DDE39E",
             white_piece="#ECECDF",
             black_piece="#3A3A3A",
-            coord_light="#C9C7AE",
-            coord_dark="#517337",
+            coord_light="#B7AFDD",
+            coord_dark="#7C73B5",
             panel_bg="#1F2A24",
             app_bg="#101713",
             text_primary="#F0F4F1",
