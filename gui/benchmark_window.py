@@ -1,7 +1,9 @@
 """Visualization window for running multiple AI-vs-random games in parallel."""
 from __future__ import annotations
 
+import os
 import random
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import List
 
@@ -54,6 +56,8 @@ class BaseBatchWindow(QtWidgets.QMainWindow):
         self.theme = theme
         self.setWindowTitle(f"10 Games: {self.AI_NAME} vs Random")
         self.matches: List[MatchView] = []
+        worker_count = max(1, os.cpu_count() or 1)
+        self._executor = ThreadPoolExecutor(max_workers=worker_count)
 
         self.timer = QtCore.QTimer(self)
         self.timer.setInterval(max(80, self.settings.ai_turn_interval_ms))
@@ -192,8 +196,21 @@ class BaseBatchWindow(QtWidgets.QMainWindow):
             return
         match.status_label.setText(f"Reached max plies | {self.AI_NAME}: {ai_side}")
 
+    def _use_parallel_ai_moves(self) -> bool:
+        return False
+
+    def _apply_move(self, match: MatchView, move: chess.Move) -> None:
+        match.board.push_move(move)
+        match.plies += 1
+        match.board_widget.update_board()
+
+        if match.board.is_game_over() or match.plies >= self.MAX_PLIES:
+            match.done = True
+            self._update_match_status(match)
+
     def _tick_all_games(self) -> None:
         active = 0
+        pending_parallel: List[MatchView] = []
         for match in self.matches:
             if match.done:
                 continue
@@ -203,21 +220,42 @@ class BaseBatchWindow(QtWidgets.QMainWindow):
                 self._update_match_status(match)
                 continue
 
-            actor = match.ai_player if match.board.turn == match.ai_color else match.random_bot
-            move = actor.choose_move(match.board)
-            match.board.push_move(move)
-            match.plies += 1
-            match.board_widget.update_board()
+            is_ai_turn = match.board.turn == match.ai_color
+            if is_ai_turn and self._use_parallel_ai_moves():
+                pending_parallel.append(match)
+                continue
 
-            if match.board.is_game_over() or match.plies >= self.MAX_PLIES:
-                match.done = True
-                self._update_match_status(match)
-            else:
+            actor = match.ai_player if is_ai_turn else match.random_bot
+            move = actor.choose_move(match.board)
+            self._apply_move(match, move)
+            if not match.done:
                 active += 1
+
+        if pending_parallel:
+            futures = [
+                (self._executor.submit(match.ai_player.choose_move, match.board.copy()), match)
+                for match in pending_parallel
+            ]
+            for future, match in futures:
+                move = future.result()
+                self._apply_move(match, move)
+                if not match.done:
+                    active += 1
+
+        if active == 0:
+            for match in self.matches:
+                if not match.done and not match.board.is_game_over() and match.plies < self.MAX_PLIES:
+                    active = 1
+                    break
 
         self._refresh_summary()
         if active == 0 and all(match.done for match in self.matches):
             self.timer.stop()
+
+    def closeEvent(self, event) -> None:
+        self.timer.stop()
+        self._executor.shutdown(wait=False)
+        super().closeEvent(event)
 
     def _refresh_summary(self) -> None:
         wins = 0
@@ -282,7 +320,10 @@ class MCTSBatchWindow(BaseBatchWindow):
 
     AI_NAME = "MCTS"
 
+    def _use_parallel_ai_moves(self) -> bool:
+        return True
+
     def _make_ai(self) -> MCTS:
-        # Keep simulations moderate so 10 parallel boards remain responsive.
-        simulations = min(200, max(80, self.settings.default_simulations))
-        return MCTS(simulations=simulations)
+        simulations = max(1, self.settings.default_simulations)
+        rollout_depth = max(1, self.settings.default_depth)
+        return MCTS(simulations=simulations, rollout_depth=rollout_depth)

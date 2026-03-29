@@ -45,7 +45,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.board = Board()
         self.alpha_beta = AlphaBetaAI(depth=settings.default_depth)
-        self.mcts = MCTS(simulations=settings.default_simulations)
+        self.mcts = MCTS(simulations=settings.default_simulations, rollout_depth=settings.default_depth)
         self.human_color = chess.WHITE
         self.game_mode = self.GAME_HUMAN_VS_AI
         self.active_ai = "alphabeta"
@@ -181,7 +181,7 @@ class MainWindow(QtWidgets.QMainWindow):
         row_depth_layout = QtWidgets.QHBoxLayout()
         row_depth_layout.setContentsMargins(0, 0, 0, 0)
         self.options_depth_selector = QtWidgets.QSpinBox()
-        self.options_depth_selector.setRange(1, 8)
+        self.options_depth_selector.setRange(1, 24)
         self.options_depth_selector.setValue(self.settings.default_depth)
         self.options_depth_selector.setSuffix(" plies")
         row_depth_layout.addWidget(self.options_depth_selector)
@@ -230,7 +230,7 @@ class MainWindow(QtWidgets.QMainWindow):
         row_white_depth_layout = QtWidgets.QHBoxLayout()
         row_white_depth_layout.setContentsMargins(0, 0, 0, 0)
         self.options_white_depth_selector = QtWidgets.QSpinBox()
-        self.options_white_depth_selector.setRange(1, 8)
+        self.options_white_depth_selector.setRange(1, 24)
         self.options_white_depth_selector.setValue(self.settings.default_depth)
         self.options_white_depth_selector.setSuffix(" plies")
         row_white_depth_layout.addWidget(self.options_white_depth_selector)
@@ -256,7 +256,7 @@ class MainWindow(QtWidgets.QMainWindow):
         row_black_depth_layout = QtWidgets.QHBoxLayout()
         row_black_depth_layout.setContentsMargins(0, 0, 0, 0)
         self.options_black_depth_selector = QtWidgets.QSpinBox()
-        self.options_black_depth_selector.setRange(1, 8)
+        self.options_black_depth_selector.setRange(1, 24)
         self.options_black_depth_selector.setValue(self.settings.default_depth)
         self.options_black_depth_selector.setSuffix(" plies")
         row_black_depth_layout.addWidget(self.options_black_depth_selector)
@@ -426,16 +426,20 @@ class MainWindow(QtWidgets.QMainWindow):
         self._set_option_row_visible("black_depth", is_aiva)
 
         if is_hva:
+            self.label_depth.setText("AI Depth")
             self.options_hint.setText("Choose side, AI engine, and depth. In game screen, only board + move history are shown.")
             self.options_start_btn.setText("Start Game")
         elif is_aiva:
+            self.label_depth.setText("AI Depth")
             self.options_hint.setText("Select white/black engines and set depth separately for each AI.")
             self.options_start_btn.setText("Start Game")
         elif mode == self.GAME_TEST_AB:
+            self.label_depth.setText("Alpha-Beta Depth")
             self.options_hint.setText("Open 10-board benchmark window with selected depth (Minimax vs Random).")
             self.options_start_btn.setText("Open Test")
         else:
-            self.options_hint.setText("Open 10-board benchmark window for Monte Carlo vs Random (depth kept for consistency).")
+            self.label_depth.setText("Monte Carlo Rollout Depth")
+            self.options_hint.setText("Open 10-board benchmark window for Monte Carlo vs Random with real rollout depth.")
             self.options_start_btn.setText("Open Test")
 
     def _apply_ai_config_from_options(self) -> None:
@@ -446,6 +450,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.settings.default_simulations = sims
         self.alpha_beta.depth = depth
         self.mcts.simulations = sims
+        self.mcts.rollout_depth = depth
 
     @staticmethod
     def _depth_to_simulations(depth: int) -> int:
@@ -543,7 +548,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if engine_name == "alphabeta":
             return AlphaBetaAI(depth=max(1, depth)).choose_move(self.board)
         simulations = self._depth_to_simulations(depth)
-        return MCTS(simulations=simulations).choose_move(self.board)
+        return MCTS(simulations=simulations, rollout_depth=max(1, depth)).choose_move(self.board)
 
     def _refresh_status(self) -> None:
         if self.board.is_checkmate():

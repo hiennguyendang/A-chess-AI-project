@@ -45,8 +45,14 @@ class MCTSNode:
 class MCTS:
     """MCTS with UCB1 selection and random rollouts."""
 
-    def __init__(self, simulations: int = 500, exploration: float = math.sqrt(2.0)) -> None:
+    def __init__(
+        self,
+        simulations: int = 500,
+        rollout_depth: int = 200,
+        exploration: float = math.sqrt(2.0),
+    ) -> None:
         self.simulations = simulations
+        self.rollout_depth = max(1, rollout_depth)
         self.exploration = exploration
 
     def choose_move(self, board: Board) -> chess.Move:
@@ -92,7 +98,7 @@ class MCTS:
     def _simulate(self, node: MCTSNode) -> Optional[chess.Color]:
         rollout_board = node.board.copy()
         depth = 0
-        while not rollout_board.is_game_over() and depth < 200:
+        while not rollout_board.is_game_over() and depth < self.rollout_depth:
             moves = rollout_board.legal_chess_moves()
             if not moves:
                 break
