@@ -110,7 +110,7 @@ class BoardWidget(QtWidgets.QWidget):
 
         board_left = board_rect.left()
         board_top = board_rect.top()
-        coord_font = QtGui.QFont("Segoe UI", max(9, int(square_size * 0.17)))
+        coord_font = QtGui.QFont("Segoe UI", max(8, int(square_size * 0.14)))
         coord_font.setBold(True)
         painter.setFont(coord_font)
 
@@ -268,7 +268,7 @@ class BoardWidget(QtWidgets.QWidget):
 
         if board.is_checkmate():
             winner = "Black" if board.turn == chess.WHITE else "White"
-            return f"{winner} win"
+            return f"{winner} Win"
         return "Draw"
 
     @staticmethod
