@@ -43,7 +43,7 @@ class Theme:
     def chesscom() -> "Theme":
         # Lavender-gray board palette matching the requested style.
         return Theme(
-            light_square="#E2E4EA",
+            light_square="#FFFFFF",
             dark_square="#8277B9",
             highlight="#F6F669",
             move_hint="#DDE39E",

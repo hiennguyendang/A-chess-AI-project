@@ -100,6 +100,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ai_timer.setInterval(self.settings.ai_turn_interval_ms)
         self.ai_timer.timeout.connect(self._on_ai_timer_tick)
 
+        self.game_elapsed_seconds = 0
+        self.game_clock_timer = QtCore.QTimer(self)
+        self.game_clock_timer.setInterval(1000)
+        self.game_clock_timer.timeout.connect(self._on_game_clock_tick)
+
         self._init_ui()
         self._apply_theme()
         self._refresh_status()
@@ -455,12 +460,29 @@ class MainWindow(QtWidgets.QMainWindow):
         )
         layout.addWidget(self.board_widget, 4)
 
+        self.timer_box = QtWidgets.QFrame()
+        self.timer_box.setObjectName("timer_box")
+        timer_box_layout = QtWidgets.QHBoxLayout()
+        timer_box_layout.setContentsMargins(10, 6, 10, 6)
+        timer_box_layout.setSpacing(8)
+        self.timer_box.setLayout(timer_box_layout)
+
+        timer_label = QtWidgets.QLabel("Timer")
+        timer_label.setObjectName("timer_label")
+        timer_box_layout.addWidget(timer_label)
+
+        self.timer_value_label = QtWidgets.QLabel("00:00")
+        self.timer_value_label.setObjectName("timer_value")
+        timer_box_layout.addWidget(self.timer_value_label)
+
         side_panel = QtWidgets.QVBoxLayout()
         side_panel.setSpacing(10)
         layout.addLayout(side_panel, 2)
 
         self.game_title_label = QtWidgets.QLabel("Game")
         self.game_title_label.setObjectName("title")
+        self.game_title_label.setWordWrap(True)
+        self.game_title_label.setTextFormat(QtCore.Qt.RichText)
         side_panel.addWidget(self.game_title_label)
 
         self.status_label = QtWidgets.QLabel("Ready")
@@ -498,6 +520,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.material_stats_label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
         side_panel.addWidget(self.material_stats_label)
 
+        side_panel.addWidget(self.timer_box)
+
         side_panel.addStretch(1)
         return page
 
@@ -516,6 +540,13 @@ class MainWindow(QtWidgets.QMainWindow):
             QLabel#menu_hint {{ color: #D8D1F4; background: #35295A; border: 1px solid #5F4D9A; padding: 8px; border-radius: 6px; }}
             QLabel#title {{ font-size: 18px; font-weight: 700; color: {self.theme.text_primary}; }}
             QLabel#status {{ color: {self.theme.text_muted}; background: {self.theme.panel_bg}; padding: 8px; border-radius: 6px; }}
+            QFrame#timer_box {{
+                background: {self.theme.panel_bg};
+                border: 1px solid {self.theme.accent};
+                border-radius: 8px;
+            }}
+            QLabel#timer_label {{ color: {self.theme.text_muted}; font-size: 12px; font-weight: 600; }}
+            QLabel#timer_value {{ color: {self.theme.text_primary}; font-size: 16px; font-weight: 700; }}
             QLabel#material_stats {{
                 color: {self.theme.text_primary};
                 background: {self.theme.panel_bg};
@@ -735,6 +766,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _start_game_session(self) -> None:
         self.ai_timer.stop()
+        self._reset_game_timer()
+        self.game_clock_timer.start()
         self.board.reset()
         flip_for_black_human = self.game_mode == self.GAME_HUMAN_VS_AI and self.human_color == chess.BLACK
         self.board_widget.set_flipped(flip_for_black_human)
@@ -744,37 +777,51 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.game_mode == self.GAME_HUMAN_VS_AI:
             side_name = "White" if self.human_color == chess.WHITE else "Black"
             if self.active_ai == "alphabeta":
-                ai_info = f"Alpha-Beta (d={self.human_ai_depth})"
+                model_name = "Alpha-Beta"
+                options_text = f"d={self.human_ai_depth}"
             else:
                 mode_tag = "heur" if self.human_mcts_use_heuristic else "pure"
-                ai_info = (
-                    f"Monte Carlo (sim={self.human_mcts_simulations}, rd={self.human_mcts_rollout_depth}, "
-                    f"{mode_tag})"
+                model_name = "Monte Carlo"
+                options_text = (
+                    f"sims={self.human_mcts_simulations}, rd={self.human_mcts_rollout_depth}, {mode_tag}"
                 )
-            self.game_title_label.setText(f"Human vs AI ({ai_info}) | You: {side_name}")
+            self.game_title_label.setText(
+                f"<span style='font-size:20px; font-weight:700; color:{self.theme.text_primary};'>Human vs AI</span><br/>"
+                f"<span style='font-size:14px; color:{self.theme.accent};'>You: {side_name}</span><br/>"
+                f"<span style='font-size:14px; color:{self.theme.text_primary};'>AI:</span><br/>"
+                f"<span style='font-size:13px; color:{self.theme.text_muted};'>&nbsp;&nbsp;&nbsp;&nbsp;- Model: {model_name}</span><br/>"
+                f"<span style='font-size:13px; color:{self.theme.text_muted};'>&nbsp;&nbsp;&nbsp;&nbsp;- Options: {options_text}</span>"
+            )
             self.toggle_ai_btn.hide()
         else:
             if self.white_ai == "alphabeta":
-                white_name = f"Alpha-Beta (d={self.white_ai_depth})"
+                white_model = "Alpha-Beta"
+                white_options = f"d={self.white_ai_depth}"
             else:
                 white_mode = "heur" if self.white_mcts_use_heuristic else "pure"
-                white_name = (
-                    f"Monte Carlo (sim={self.white_mcts_simulations}, rd={self.white_mcts_rollout_depth}, "
-                    f"{white_mode})"
+                white_model = "Monte Carlo"
+                white_options = (
+                    f"sims={self.white_mcts_simulations}, rd={self.white_mcts_rollout_depth}, {white_mode}"
                 )
 
             if self.black_ai == "alphabeta":
-                black_name = f"Alpha-Beta (d={self.black_ai_depth})"
+                black_model = "Alpha-Beta"
+                black_options = f"d={self.black_ai_depth}"
             else:
                 black_mode = "heur" if self.black_mcts_use_heuristic else "pure"
-                black_name = (
-                    f"Monte Carlo (sim={self.black_mcts_simulations}, rd={self.black_mcts_rollout_depth}, "
-                    f"{black_mode})"
+                black_model = "Monte Carlo"
+                black_options = (
+                    f"sims={self.black_mcts_simulations}, rd={self.black_mcts_rollout_depth}, {black_mode}"
                 )
 
             self.game_title_label.setText(
-                f"AI vs AI | White: {white_name} | "
-                f"Black: {black_name}"
+                f"<span style='font-size:20px; font-weight:700; color:{self.theme.text_primary};'>AI vs AI</span><br/>"
+                f"<span style='font-size:14px; color:{self.theme.accent};'>White:</span><br/>"
+                f"<span style='font-size:13px; color:{self.theme.text_muted};'>&nbsp;&nbsp;&nbsp;&nbsp;- Model: {white_model}</span><br/>"
+                f"<span style='font-size:13px; color:{self.theme.text_muted};'>&nbsp;&nbsp;&nbsp;&nbsp;- Options: {white_options}</span><br/>"
+                f"<span style='font-size:14px; color:{self.theme.accent};'>Black:</span><br/>"
+                f"<span style='font-size:13px; color:{self.theme.text_muted};'>&nbsp;&nbsp;&nbsp;&nbsp;- Model: {black_model}</span><br/>"
+                f"<span style='font-size:13px; color:{self.theme.text_muted};'>&nbsp;&nbsp;&nbsp;&nbsp;- Options: {black_options}</span>"
             )
             self.toggle_ai_btn.show()
             self.toggle_ai_btn.setText("Stop AI vs AI")
@@ -858,6 +905,9 @@ class MainWindow(QtWidgets.QMainWindow):
         ).choose_move(self.board)
 
     def _refresh_status(self) -> None:
+        if self.board.is_game_over():
+            self.game_clock_timer.stop()
+
         if self.board.is_checkmate():
             winner = "Black" if self.board.turn == chess.WHITE else "White"
             self.status_label.setText(f"Checkmate. {winner} wins.")
@@ -975,8 +1025,21 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def on_back_to_menu(self) -> None:
         self.ai_timer.stop()
+        self.game_clock_timer.stop()
         self.setup_layers.setCurrentWidget(self.mode_layer)
         self.stacked.setCurrentWidget(self.menu_page)
+
+    def _format_elapsed(self, total_seconds: int) -> str:
+        minutes, seconds = divmod(total_seconds, 60)
+        return f"{minutes:02d}:{seconds:02d}"
+
+    def _reset_game_timer(self) -> None:
+        self.game_elapsed_seconds = 0
+        self.timer_value_label.setText(self._format_elapsed(self.game_elapsed_seconds))
+
+    def _on_game_clock_tick(self) -> None:
+        self.game_elapsed_seconds += 1
+        self.timer_value_label.setText(self._format_elapsed(self.game_elapsed_seconds))
 
     def on_human_move(self, move_uci: str) -> None:
         """Apply human move then trigger AI reply."""
