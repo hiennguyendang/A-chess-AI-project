@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
 import chess
 from PyQt5 import QtCore, QtGui, QtWidgets
@@ -47,6 +47,7 @@ class BoardWidget(QtWidgets.QWidget):
         self.is_flipped = False
         self.selected_square: Optional[Square] = None
         self.highlight_targets: List[Square] = []
+        self.pending_promotion: Optional[dict[str, Any]] = None
         self.piece_pixmaps = self._load_piece_pixmaps()
         self.setMinimumSize(min_size, min_size)
 
@@ -54,6 +55,7 @@ class BoardWidget(QtWidgets.QWidget):
         self.board = board
         self.selected_square = None
         self.highlight_targets = []
+        self.pending_promotion = None
         self.update()
 
     def update_board(self) -> None:
@@ -63,14 +65,42 @@ class BoardWidget(QtWidgets.QWidget):
         self.is_flipped = flipped
         self.selected_square = None
         self.highlight_targets = []
+        self.pending_promotion = None
+        self.update()
+
+    def begin_promotion_selection(
+        self,
+        src: Square,
+        dst: Square,
+        piece_color: chess.Color,
+        options: List[str],
+        on_selected: Callable[[str], None],
+    ) -> None:
+        normalized = [opt.lower() for opt in options if opt.lower() in {"q", "r", "b", "n"}]
+        if not normalized:
+            return
+
+        self.pending_promotion = {
+            "src": src,
+            "dst": dst,
+            "color": piece_color,
+            "options": normalized,
+            "on_selected": on_selected,
+        }
+        self.selected_square = None
+        self.highlight_targets = []
         self.update()
 
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:  # pragma: no cover - UI interaction
-        if not self.can_human_move():
-            return
-
         board_rect, square_size, _ = self._board_geometry()
         if square_size <= 0:
+            return
+
+        if self.pending_promotion is not None:
+            self._handle_promotion_click(event.x(), event.y(), board_rect, square_size)
+            return
+
+        if not self.can_human_move():
             return
 
         if not board_rect.contains(event.x(), event.y()):
@@ -100,10 +130,22 @@ class BoardWidget(QtWidgets.QWidget):
             self.update()
             return
 
-        move_uci = self._square_to_uci(self.selected_square, clicked)
+        src = self.selected_square
+        move_uci = self._square_to_uci(src, clicked)
         legal_uci = self.board.legal_moves()
-        if move_uci not in legal_uci and (move_uci + "q") in legal_uci:
-            move_uci = move_uci + "q"
+
+        promotion_options = [opt for opt in ("q", "r", "b", "n") if (move_uci + opt) in legal_uci]
+        if promotion_options:
+            piece = self.board.to_python_chess().piece_at(chess.square(src[0], src[1]))
+            if piece is not None:
+                self.begin_promotion_selection(
+                    src=src,
+                    dst=clicked,
+                    piece_color=piece.color,
+                    options=promotion_options,
+                    on_selected=lambda suffix, base=move_uci: self.move_made_callback(base + suffix),
+                )
+            return
 
         if move_uci in legal_uci:
             self.move_made_callback(move_uci)
@@ -207,6 +249,9 @@ class BoardWidget(QtWidgets.QWidget):
             painter.setPen(QtGui.QColor("#F5D547"))
             painter.drawText(board_rect, QtCore.Qt.AlignCenter, result_text)
 
+        if self.pending_promotion is not None:
+            self._draw_promotion_overlay(painter, board_rect, square_size)
+
     def _piece_at(self, file: int, rank: int) -> Optional[chess.Piece]:
         sq = chess.square(file, rank)
         return self.board.to_python_chess().piece_at(sq)
@@ -306,6 +351,85 @@ class BoardWidget(QtWidgets.QWidget):
             winner = "Black" if board.turn == chess.WHITE else "White"
             return f"{winner} Win"
         return "Draw"
+
+    def _promotion_option_rects(self, board_rect: QtCore.QRectF, square_size: float) -> List[QtCore.QRectF]:
+        assert self.pending_promotion is not None
+        options = self.pending_promotion["options"]
+        count = len(options)
+        box_size = max(32.0, square_size * 0.9)
+        gap = max(6.0, square_size * 0.12)
+        total_width = count * box_size + (count - 1) * gap
+        start_x = board_rect.left() + (board_rect.width() - total_width) / 2
+        y = board_rect.top() + (board_rect.height() - box_size) / 2
+
+        return [
+            QtCore.QRectF(start_x + idx * (box_size + gap), y, box_size, box_size)
+            for idx in range(count)
+        ]
+
+    def _piece_key_from_choice(self, color: chess.Color, choice: str) -> str:
+        prefix = "w" if color == chess.WHITE else "b"
+        return f"{prefix}{choice}"
+
+    def _draw_promotion_overlay(
+        self,
+        painter: QtGui.QPainter,
+        board_rect: QtCore.QRectF,
+        square_size: float,
+    ) -> None:
+        assert self.pending_promotion is not None
+        painter.fillRect(board_rect, QtGui.QColor(12, 10, 18, 168))
+
+        title_rect = QtCore.QRectF(board_rect.left(), board_rect.top() + board_rect.height() * 0.33, board_rect.width(), 24)
+        title_font = QtGui.QFont("Segoe UI", max(11, int(square_size * 0.2)))
+        title_font.setBold(True)
+        painter.setFont(title_font)
+        painter.setPen(QtGui.QColor("#F6F0FF"))
+        painter.drawText(title_rect, QtCore.Qt.AlignCenter, "Choose promotion")
+
+        option_rects = self._promotion_option_rects(board_rect, square_size)
+        color = self.pending_promotion["color"]
+        options = self.pending_promotion["options"]
+
+        for idx, rect in enumerate(option_rects):
+            painter.setPen(QtGui.QColor("#C7B9F1"))
+            painter.setBrush(QtGui.QColor("#2F2450"))
+            painter.drawRoundedRect(rect, 6, 6)
+
+            key = self._piece_key_from_choice(color, options[idx])
+            pixmap = self.piece_pixmaps.get(key)
+            if pixmap is not None:
+                target_size = int(rect.height() * 0.78)
+                x = int(rect.left() + (rect.width() - target_size) / 2)
+                y = int(rect.top() + (rect.height() - target_size) / 2)
+                scaled = pixmap.scaled(target_size, target_size, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+                painter.drawPixmap(QtCore.QRect(x, y, target_size, target_size), scaled)
+            else:
+                symbol = options[idx].upper() if color == chess.WHITE else options[idx].lower()
+                text = UNICODE_PIECES.get(symbol, options[idx].upper())
+                icon_font = QtGui.QFont("Segoe UI Symbol", int(rect.height() * 0.62))
+                painter.setFont(icon_font)
+                painter.setPen(QtGui.QColor(self.theme.text_primary if hasattr(self.theme, "text_primary") else "#F6F0FF"))
+                painter.drawText(rect, QtCore.Qt.AlignCenter, text)
+
+    def _handle_promotion_click(
+        self,
+        x: float,
+        y: float,
+        board_rect: QtCore.QRectF,
+        square_size: float,
+    ) -> None:
+        assert self.pending_promotion is not None
+        option_rects = self._promotion_option_rects(board_rect, square_size)
+        click_point = QtCore.QPointF(x, y)
+        for idx, rect in enumerate(option_rects):
+            if rect.contains(click_point):
+                callback = self.pending_promotion["on_selected"]
+                choice = self.pending_promotion["options"][idx]
+                self.pending_promotion = None
+                callback(choice)
+                self.update()
+                return
 
     @staticmethod
     def _square_to_uci(src: Square, dst: Square) -> str:

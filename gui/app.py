@@ -990,6 +990,8 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         move = self._pick_ai_move()
+        if self._handle_ai_promotion_choice(move):
+            return
         self._record_move(move)
         self.board.push_move(move)
         self.board_widget.update_board()
@@ -1003,10 +1005,61 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         move = self._pick_ai_move()
+        if self._handle_ai_promotion_choice(move):
+            return
         self._record_move(move)
         self.board.push_move(move)
         self.board_widget.update_board()
         self._refresh_status()
+
+    def _handle_ai_promotion_choice(self, move: chess.Move) -> bool:
+        board = self.board.to_python_chess()
+        piece = board.piece_at(move.from_square)
+        if piece is None or piece.piece_type != chess.PAWN:
+            return False
+
+        to_rank = chess.square_rank(move.to_square)
+        if to_rank not in (0, 7):
+            return False
+
+        from_file = chess.square_file(move.from_square)
+        from_rank = chess.square_rank(move.from_square)
+        to_file = chess.square_file(move.to_square)
+        to_rank = chess.square_rank(move.to_square)
+
+        if self.game_mode == self.GAME_AI_VS_AI:
+            self.ai_timer.stop()
+
+        def apply_selected_promotion(choice: str) -> None:
+            promotion_map = {
+                "q": chess.QUEEN,
+                "r": chess.ROOK,
+                "b": chess.BISHOP,
+                "n": chess.KNIGHT,
+            }
+            promoted_move = chess.Move(
+                move.from_square,
+                move.to_square,
+                promotion=promotion_map.get(choice.lower(), chess.QUEEN),
+            )
+            self._record_move(promoted_move)
+            self.board.push_move(promoted_move)
+            self.board_widget.update_board()
+            self._refresh_status()
+
+            if self.game_mode == self.GAME_AI_VS_AI and not self.board.is_game_over():
+                self.ai_timer.start()
+            elif self.game_mode == self.GAME_HUMAN_VS_AI:
+                self._kick_ai_if_needed()
+
+        self.board_widget.begin_promotion_selection(
+            src=(from_file, from_rank),
+            dst=(to_file, to_rank),
+            piece_color=piece.color,
+            options=["q", "r", "b", "n"],
+            on_selected=apply_selected_promotion,
+        )
+        return True
 
     def on_toggle_ai_vs_ai(self) -> None:
         if self.game_mode != self.GAME_AI_VS_AI:
