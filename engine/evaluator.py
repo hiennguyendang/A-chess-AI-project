@@ -101,7 +101,8 @@ class Evaluator:
         """Return a score from White's perspective (centipawns)."""
         if board.is_checkmate():
             return -MATE_SCORE if board.turn == chess.WHITE else MATE_SCORE
-        if board.is_stalemate() or board.is_insufficient_material():
+        # Keep terminal draw rules in sync with engine.board.Board.
+        if board.is_stalemate() or board.is_insufficient_material() or board.halfmove_clock >= 100:
             return 0
 
         score = 0

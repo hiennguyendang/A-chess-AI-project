@@ -49,11 +49,20 @@ class Board:
         return [move for move in self._board.legal_moves if move.from_square == from_square]
 
     def is_game_over(self) -> bool:
-        # Include claimable draws (e.g., 50-move rule) in game-over detection.
-        return self._board.is_game_over(claim_draw=True)
+        return (
+            self.is_checkmate()
+            or self.is_stalemate()
+            or self.is_draw_by_fifty_move_rule()
+            or self.is_draw_by_insufficient_material()
+        )
 
     def result(self) -> str:
-        return self._board.result(claim_draw=True)
+        if self.is_checkmate():
+            # When side to move is checkmated, that side loses.
+            return "0-1" if self._board.turn == chess.WHITE else "1-0"
+        if self.is_stalemate() or self.is_draw_by_fifty_move_rule() or self.is_draw_by_insufficient_material():
+            return "1/2-1/2"
+        return "*"
 
     def is_check(self) -> bool:
         return self._board.is_check()
@@ -63,6 +72,13 @@ class Board:
 
     def is_stalemate(self) -> bool:
         return self._board.is_stalemate()
+
+    def is_draw_by_fifty_move_rule(self) -> bool:
+        # 50-move rule means 100 half-moves without pawn move or capture.
+        return self._board.halfmove_clock >= 100
+
+    def is_draw_by_insufficient_material(self) -> bool:
+        return self._board.is_insufficient_material()
 
     def fen(self) -> str:
         return self._board.fen()
