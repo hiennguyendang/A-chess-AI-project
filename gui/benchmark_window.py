@@ -157,6 +157,8 @@ class BaseBatchWindow(QtWidgets.QMainWindow):
                 move_made_callback=lambda _move: None,
                 can_human_move=lambda: False,
                 min_size=200,
+                coord_font_scale=0.07,
+                coord_font_min=4,
             )
             box.addWidget(board_widget)
 

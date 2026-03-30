@@ -38,6 +38,8 @@ class BoardWidget(QtWidgets.QWidget):
         move_made_callback: Callable[[str], None],
         can_human_move: Callable[[], bool],
         min_size: int = 480,
+        coord_font_scale: float = 0.14,
+        coord_font_min: int = 8,
     ):
         super().__init__()
         self.board = board
@@ -48,6 +50,8 @@ class BoardWidget(QtWidgets.QWidget):
         self.selected_square: Optional[Square] = None
         self.highlight_targets: List[Square] = []
         self.pending_promotion: Optional[dict[str, Any]] = None
+        self.coord_font_scale = coord_font_scale
+        self.coord_font_min = coord_font_min
         self.piece_pixmaps = self._load_piece_pixmaps()
         self.setMinimumSize(min_size, min_size)
 
@@ -161,7 +165,7 @@ class BoardWidget(QtWidgets.QWidget):
 
         board_left = board_rect.left()
         board_top = board_rect.top()
-        coord_font = QtGui.QFont("Segoe UI", max(8, int(square_size * 0.14)))
+        coord_font = QtGui.QFont("Segoe UI", max(self.coord_font_min, int(square_size * self.coord_font_scale)))
         coord_font.setBold(True)
         painter.setFont(coord_font)
 
