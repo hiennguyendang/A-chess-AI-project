@@ -52,11 +52,13 @@ class MCTS:
         rollout_depth: int = 200,
         exploration: float = math.sqrt(2.0),
         heuristic_scale: float = 400.0,
+        use_heuristic_eval: bool = True,
     ) -> None:
         self.simulations = simulations
         self.rollout_depth = max(1, rollout_depth)
         self.exploration = exploration
         self.heuristic_scale = max(1.0, heuristic_scale)
+        self.use_heuristic_eval = use_heuristic_eval
 
     def choose_move(self, board: Board) -> chess.Move:
         root = MCTSNode(board=board.copy(), move=None, parent=None)
@@ -115,6 +117,9 @@ class MCTS:
         if result == "0-1":
             return 1.0 if root_player == chess.BLACK else 0.0
         if result == "1/2-1/2":
+            return 0.5
+
+        if not self.use_heuristic_eval:
             return 0.5
 
         # Rollout depth cutoff: use static evaluation instead of treating as draw.

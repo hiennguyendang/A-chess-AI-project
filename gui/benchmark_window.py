@@ -326,4 +326,8 @@ class MCTSBatchWindow(BaseBatchWindow):
     def _make_ai(self) -> MCTS:
         simulations = max(1, self.settings.default_simulations)
         rollout_depth = max(1, self.settings.default_depth)
-        return MCTS(simulations=simulations, rollout_depth=rollout_depth)
+        return MCTS(
+            simulations=simulations,
+            rollout_depth=rollout_depth,
+            use_heuristic_eval=self.settings.default_mcts_use_heuristic,
+        )

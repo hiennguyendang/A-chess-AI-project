@@ -8,5 +8,6 @@ from dataclasses import dataclass
 class Settings:
     default_depth: int = 3
     default_simulations: int = 500
+    default_mcts_use_heuristic: bool = True
     ai_turn_interval_ms: int = 180
     use_opening_book: bool = False

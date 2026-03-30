@@ -67,21 +67,28 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.board = Board()
         self.alpha_beta = AlphaBetaAI(depth=settings.default_depth)
-        self.mcts = MCTS(simulations=settings.default_simulations, rollout_depth=settings.default_depth)
+        self.mcts = MCTS(
+            simulations=settings.default_simulations,
+            rollout_depth=settings.default_depth,
+            use_heuristic_eval=settings.default_mcts_use_heuristic,
+        )
         self.human_color = chess.WHITE
         self.game_mode = self.GAME_HUMAN_VS_AI
         self.active_ai = "alphabeta"
         self.human_ai_depth = settings.default_depth
         self.human_mcts_simulations = settings.default_simulations
         self.human_mcts_rollout_depth = settings.default_depth
+        self.human_mcts_use_heuristic = settings.default_mcts_use_heuristic
         self.white_ai = "alphabeta"
         self.white_ai_depth = settings.default_depth
         self.white_mcts_simulations = settings.default_simulations
         self.white_mcts_rollout_depth = settings.default_depth
+        self.white_mcts_use_heuristic = settings.default_mcts_use_heuristic
         self.black_ai = "mcts"
         self.black_ai_depth = settings.default_depth
         self.black_mcts_simulations = settings.default_simulations
         self.black_mcts_rollout_depth = settings.default_depth
+        self.black_mcts_use_heuristic = settings.default_mcts_use_heuristic
         self.move_history_lines: List[str] = []
         self.selected_mode = self.GAME_HUMAN_VS_AI
 
@@ -271,6 +278,19 @@ class MainWindow(QtWidgets.QMainWindow):
         form.addRow(self.label_mcts_rollout, self.row_mcts_rollout)
         self.option_rows["mcts_rollout"] = (self.label_mcts_rollout, self.row_mcts_rollout)
 
+        self.row_mcts_mode = QtWidgets.QWidget()
+        row_mcts_mode_layout = QtWidgets.QHBoxLayout()
+        row_mcts_mode_layout.setContentsMargins(0, 0, 0, 0)
+        self.options_mcts_mode_selector = QtWidgets.QComboBox()
+        self.options_mcts_mode_selector.addItem("Pure (random rollout)", False)
+        self.options_mcts_mode_selector.addItem("Heuristic (eval at cutoff)", True)
+        self.options_mcts_mode_selector.setCurrentIndex(1 if self.settings.default_mcts_use_heuristic else 0)
+        row_mcts_mode_layout.addWidget(self.options_mcts_mode_selector)
+        self.row_mcts_mode.setLayout(row_mcts_mode_layout)
+        self.label_mcts_mode = QtWidgets.QLabel("MCTS Mode")
+        form.addRow(self.label_mcts_mode, self.row_mcts_mode)
+        self.option_rows["mcts_mode"] = (self.label_mcts_mode, self.row_mcts_mode)
+
         self.row_white_ai = QtWidgets.QWidget()
         row_white_layout = QtWidgets.QHBoxLayout()
         row_white_layout.setContentsMargins(0, 0, 0, 0)
@@ -323,6 +343,19 @@ class MainWindow(QtWidgets.QMainWindow):
         self.label_white_mcts_rollout = QtWidgets.QLabel("White MCTS Rollout Depth")
         form.addRow(self.label_white_mcts_rollout, self.row_white_mcts_rollout)
         self.option_rows["white_mcts_rollout"] = (self.label_white_mcts_rollout, self.row_white_mcts_rollout)
+
+        self.row_white_mcts_mode = QtWidgets.QWidget()
+        row_white_mcts_mode_layout = QtWidgets.QHBoxLayout()
+        row_white_mcts_mode_layout.setContentsMargins(0, 0, 0, 0)
+        self.options_white_mcts_mode_selector = QtWidgets.QComboBox()
+        self.options_white_mcts_mode_selector.addItem("Pure (random rollout)", False)
+        self.options_white_mcts_mode_selector.addItem("Heuristic (eval at cutoff)", True)
+        self.options_white_mcts_mode_selector.setCurrentIndex(1 if self.settings.default_mcts_use_heuristic else 0)
+        row_white_mcts_mode_layout.addWidget(self.options_white_mcts_mode_selector)
+        self.row_white_mcts_mode.setLayout(row_white_mcts_mode_layout)
+        self.label_white_mcts_mode = QtWidgets.QLabel("White MCTS Mode")
+        form.addRow(self.label_white_mcts_mode, self.row_white_mcts_mode)
+        self.option_rows["white_mcts_mode"] = (self.label_white_mcts_mode, self.row_white_mcts_mode)
 
         self.row_black_ai = QtWidgets.QWidget()
         row_black_layout = QtWidgets.QHBoxLayout()
@@ -377,6 +410,19 @@ class MainWindow(QtWidgets.QMainWindow):
         self.label_black_mcts_rollout = QtWidgets.QLabel("Black MCTS Rollout Depth")
         form.addRow(self.label_black_mcts_rollout, self.row_black_mcts_rollout)
         self.option_rows["black_mcts_rollout"] = (self.label_black_mcts_rollout, self.row_black_mcts_rollout)
+
+        self.row_black_mcts_mode = QtWidgets.QWidget()
+        row_black_mcts_mode_layout = QtWidgets.QHBoxLayout()
+        row_black_mcts_mode_layout.setContentsMargins(0, 0, 0, 0)
+        self.options_black_mcts_mode_selector = QtWidgets.QComboBox()
+        self.options_black_mcts_mode_selector.addItem("Pure (random rollout)", False)
+        self.options_black_mcts_mode_selector.addItem("Heuristic (eval at cutoff)", True)
+        self.options_black_mcts_mode_selector.setCurrentIndex(1 if self.settings.default_mcts_use_heuristic else 0)
+        row_black_mcts_mode_layout.addWidget(self.options_black_mcts_mode_selector)
+        self.row_black_mcts_mode.setLayout(row_black_mcts_mode_layout)
+        self.label_black_mcts_mode = QtWidgets.QLabel("Black MCTS Mode")
+        form.addRow(self.label_black_mcts_mode, self.row_black_mcts_mode)
+        self.option_rows["black_mcts_mode"] = (self.label_black_mcts_mode, self.row_black_mcts_mode)
 
         card_layout.addLayout(form)
 
@@ -553,16 +599,19 @@ class MainWindow(QtWidgets.QMainWindow):
         self._set_option_row_visible("depth", not is_aiva)
         self._set_option_row_visible("mcts_sim", False)
         self._set_option_row_visible("mcts_rollout", False)
+        self._set_option_row_visible("mcts_mode", False)
         self._set_option_row_visible("side", is_hva)
         self._set_option_row_visible("ai", is_hva)
         self._set_option_row_visible("white_ai", is_aiva)
         self._set_option_row_visible("white_depth", is_aiva)
         self._set_option_row_visible("white_mcts_sim", False)
         self._set_option_row_visible("white_mcts_rollout", False)
+        self._set_option_row_visible("white_mcts_mode", False)
         self._set_option_row_visible("black_ai", is_aiva)
         self._set_option_row_visible("black_depth", is_aiva)
         self._set_option_row_visible("black_mcts_sim", False)
         self._set_option_row_visible("black_mcts_rollout", False)
+        self._set_option_row_visible("black_mcts_mode", False)
 
         if is_hva:
             self.label_depth.setText("Alpha-Beta Depth")
@@ -590,12 +639,14 @@ class MainWindow(QtWidgets.QMainWindow):
             self._set_option_row_visible("depth", True)
             self._set_option_row_visible("mcts_sim", False)
             self._set_option_row_visible("mcts_rollout", False)
+            self._set_option_row_visible("mcts_mode", False)
             return
 
         if mode == self.GAME_TEST_MCTS:
             self._set_option_row_visible("depth", False)
             self._set_option_row_visible("mcts_sim", True)
             self._set_option_row_visible("mcts_rollout", True)
+            self._set_option_row_visible("mcts_mode", True)
             return
 
         if is_hva:
@@ -603,6 +654,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._set_option_row_visible("depth", not is_mcts)
             self._set_option_row_visible("mcts_sim", is_mcts)
             self._set_option_row_visible("mcts_rollout", is_mcts)
+            self._set_option_row_visible("mcts_mode", is_mcts)
             return
 
         if is_aiva:
@@ -612,10 +664,12 @@ class MainWindow(QtWidgets.QMainWindow):
             self._set_option_row_visible("white_depth", not white_is_mcts)
             self._set_option_row_visible("white_mcts_sim", white_is_mcts)
             self._set_option_row_visible("white_mcts_rollout", white_is_mcts)
+            self._set_option_row_visible("white_mcts_mode", white_is_mcts)
 
             self._set_option_row_visible("black_depth", not black_is_mcts)
             self._set_option_row_visible("black_mcts_sim", black_is_mcts)
             self._set_option_row_visible("black_mcts_rollout", black_is_mcts)
+            self._set_option_row_visible("black_mcts_mode", black_is_mcts)
 
     def _apply_alphabeta_from_options(self) -> None:
         depth = self.options_depth_selector.value()
@@ -625,10 +679,13 @@ class MainWindow(QtWidgets.QMainWindow):
     def _apply_mcts_from_options(self) -> None:
         simulations = self.options_mcts_sim_selector.value()
         rollout_depth = self.options_mcts_rollout_selector.value()
+        use_heuristic = bool(self.options_mcts_mode_selector.currentData())
         self.settings.default_simulations = simulations
         self.settings.default_depth = rollout_depth
+        self.settings.default_mcts_use_heuristic = use_heuristic
         self.mcts.simulations = simulations
         self.mcts.rollout_depth = rollout_depth
+        self.mcts.use_heuristic_eval = use_heuristic
 
     def _on_start_from_options(self) -> None:
         mode = self.selected_mode
@@ -653,8 +710,10 @@ class MainWindow(QtWidgets.QMainWindow):
             else:
                 self.human_mcts_simulations = self.options_mcts_sim_selector.value()
                 self.human_mcts_rollout_depth = self.options_mcts_rollout_selector.value()
+                self.human_mcts_use_heuristic = bool(self.options_mcts_mode_selector.currentData())
                 self.settings.default_simulations = self.human_mcts_simulations
                 self.settings.default_depth = self.human_mcts_rollout_depth
+                self.settings.default_mcts_use_heuristic = self.human_mcts_use_heuristic
         else:
             self.white_ai = self.options_white_ai_selector.currentData()
             self.black_ai = self.options_black_ai_selector.currentData()
@@ -663,12 +722,14 @@ class MainWindow(QtWidgets.QMainWindow):
             else:
                 self.white_mcts_simulations = self.options_white_mcts_sim_selector.value()
                 self.white_mcts_rollout_depth = self.options_white_mcts_rollout_selector.value()
+                self.white_mcts_use_heuristic = bool(self.options_white_mcts_mode_selector.currentData())
 
             if self.black_ai == "alphabeta":
                 self.black_ai_depth = self.options_black_depth_selector.value()
             else:
                 self.black_mcts_simulations = self.options_black_mcts_sim_selector.value()
                 self.black_mcts_rollout_depth = self.options_black_mcts_rollout_selector.value()
+                self.black_mcts_use_heuristic = bool(self.options_black_mcts_mode_selector.currentData())
 
         self._start_game_session()
 
@@ -685,19 +746,31 @@ class MainWindow(QtWidgets.QMainWindow):
             if self.active_ai == "alphabeta":
                 ai_info = f"Alpha-Beta (d={self.human_ai_depth})"
             else:
-                ai_info = f"Monte Carlo (sim={self.human_mcts_simulations}, rd={self.human_mcts_rollout_depth})"
+                mode_tag = "heur" if self.human_mcts_use_heuristic else "pure"
+                ai_info = (
+                    f"Monte Carlo (sim={self.human_mcts_simulations}, rd={self.human_mcts_rollout_depth}, "
+                    f"{mode_tag})"
+                )
             self.game_title_label.setText(f"Human vs AI ({ai_info}) | You: {side_name}")
             self.toggle_ai_btn.hide()
         else:
             if self.white_ai == "alphabeta":
                 white_name = f"Alpha-Beta (d={self.white_ai_depth})"
             else:
-                white_name = f"Monte Carlo (sim={self.white_mcts_simulations}, rd={self.white_mcts_rollout_depth})"
+                white_mode = "heur" if self.white_mcts_use_heuristic else "pure"
+                white_name = (
+                    f"Monte Carlo (sim={self.white_mcts_simulations}, rd={self.white_mcts_rollout_depth}, "
+                    f"{white_mode})"
+                )
 
             if self.black_ai == "alphabeta":
                 black_name = f"Alpha-Beta (d={self.black_ai_depth})"
             else:
-                black_name = f"Monte Carlo (sim={self.black_mcts_simulations}, rd={self.black_mcts_rollout_depth})"
+                black_mode = "heur" if self.black_mcts_use_heuristic else "pure"
+                black_name = (
+                    f"Monte Carlo (sim={self.black_mcts_simulations}, rd={self.black_mcts_rollout_depth}, "
+                    f"{black_mode})"
+                )
 
             self.game_title_label.setText(
                 f"AI vs AI | White: {white_name} | "
@@ -746,6 +819,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.active_ai,
                 simulations=self.human_mcts_simulations,
                 rollout_depth=self.human_mcts_rollout_depth,
+                use_heuristic_eval=self.human_mcts_use_heuristic,
             )
 
         if self.board.turn == chess.WHITE:
@@ -755,6 +829,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.white_ai,
                 simulations=self.white_mcts_simulations,
                 rollout_depth=self.white_mcts_rollout_depth,
+                use_heuristic_eval=self.white_mcts_use_heuristic,
             )
 
         if self.black_ai == "alphabeta":
@@ -763,6 +838,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.black_ai,
             simulations=self.black_mcts_simulations,
             rollout_depth=self.black_mcts_rollout_depth,
+            use_heuristic_eval=self.black_mcts_use_heuristic,
         )
 
     def _pick_engine_move(
@@ -771,12 +847,14 @@ class MainWindow(QtWidgets.QMainWindow):
         depth: int = 1,
         simulations: int = 500,
         rollout_depth: int = 3,
+        use_heuristic_eval: bool = True,
     ):
         if engine_name == "alphabeta":
             return AlphaBetaAI(depth=max(1, depth)).choose_move(self.board)
         return MCTS(
             simulations=max(1, simulations),
             rollout_depth=max(1, rollout_depth),
+            use_heuristic_eval=use_heuristic_eval,
         ).choose_move(self.board)
 
     def _refresh_status(self) -> None:
