@@ -9,6 +9,7 @@ from typing import List, Optional
 import chess
 
 from engine.board import Board
+from engine.evaluator import Evaluator
 from ai.utils import ucb1
 
 
@@ -50,10 +51,12 @@ class MCTS:
         simulations: int = 500,
         rollout_depth: int = 200,
         exploration: float = math.sqrt(2.0),
+        heuristic_scale: float = 400.0,
     ) -> None:
         self.simulations = simulations
         self.rollout_depth = max(1, rollout_depth)
         self.exploration = exploration
+        self.heuristic_scale = max(1.0, heuristic_scale)
 
     def choose_move(self, board: Board) -> chess.Move:
         root = MCTSNode(board=board.copy(), move=None, parent=None)
@@ -65,8 +68,8 @@ class MCTS:
         for _ in range(self.simulations):
             leaf = self._select(root)
             child = self._expand(leaf)
-            winner = self._simulate(child)
-            self._backpropagate(child, winner, root_player)
+            reward = self._simulate(child, root_player)
+            self._backpropagate(child, reward)
 
         # pick most visited child
         if not root.children:
@@ -95,7 +98,7 @@ class MCTS:
         node.children.append(child)
         return child
 
-    def _simulate(self, node: MCTSNode) -> Optional[chess.Color]:
+    def _simulate(self, node: MCTSNode, root_player: chess.Color) -> float:
         rollout_board = node.board.copy()
         depth = 0
         while not rollout_board.is_game_over() and depth < self.rollout_depth:
@@ -108,17 +111,20 @@ class MCTS:
 
         result = rollout_board.result()
         if result == "1-0":
-            return chess.WHITE
+            return 1.0 if root_player == chess.WHITE else 0.0
         if result == "0-1":
-            return chess.BLACK
-        return None
+            return 1.0 if root_player == chess.BLACK else 0.0
+        if result == "1/2-1/2":
+            return 0.5
 
-    def _backpropagate(self, node: MCTSNode, winner: Optional[chess.Color], root_player: chess.Color) -> None:
+        # Rollout depth cutoff: use static evaluation instead of treating as draw.
+        eval_cp = Evaluator.evaluate(rollout_board.to_python_chess())
+        eval_for_root = eval_cp if root_player == chess.WHITE else -eval_cp
+        return 0.5 + 0.5 * math.tanh(eval_for_root / self.heuristic_scale)
+
+    def _backpropagate(self, node: MCTSNode, reward: float) -> None:
         current = node
         while current is not None:
             current.visits += 1
-            if winner is None:
-                current.wins += 0.5
-            elif winner == root_player:
-                current.wins += 1.0
+            current.wins += reward
             current = current.parent

@@ -49,10 +49,11 @@ class Board:
         return [move for move in self._board.legal_moves if move.from_square == from_square]
 
     def is_game_over(self) -> bool:
-        return self._board.is_game_over()
+        # Include claimable draws (e.g., 50-move rule) in game-over detection.
+        return self._board.is_game_over(claim_draw=True)
 
     def result(self) -> str:
-        return self._board.result()
+        return self._board.result(claim_draw=True)
 
     def is_check(self) -> bool:
         return self._board.is_check()

@@ -44,6 +44,7 @@ class BoardWidget(QtWidgets.QWidget):
         self.theme = theme
         self.move_made_callback = move_made_callback
         self.can_human_move = can_human_move
+        self.is_flipped = False
         self.selected_square: Optional[Square] = None
         self.highlight_targets: List[Square] = []
         self.piece_pixmaps = self._load_piece_pixmaps()
@@ -56,6 +57,12 @@ class BoardWidget(QtWidgets.QWidget):
         self.update()
 
     def update_board(self) -> None:
+        self.update()
+
+    def set_flipped(self, flipped: bool) -> None:
+        self.is_flipped = flipped
+        self.selected_square = None
+        self.highlight_targets = []
         self.update()
 
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:  # pragma: no cover - UI interaction
@@ -71,11 +78,13 @@ class BoardWidget(QtWidgets.QWidget):
 
         rel_x = event.x() - board_rect.left()
         rel_y = event.y() - board_rect.top()
-        file = int(rel_x // square_size)
-        rank = 7 - int(rel_y // square_size)
+        display_col = int(rel_x // square_size)
+        display_row = int(rel_y // square_size)
 
-        if file < 0 or file > 7 or rank < 0 or rank > 7:
+        if display_col < 0 or display_col > 7 or display_row < 0 or display_row > 7:
             return
+
+        file, rank = self._from_display_coords(display_col, display_row)
 
         clicked = (file, rank)
 
@@ -116,12 +125,13 @@ class BoardWidget(QtWidgets.QWidget):
 
         for file in range(8):
             for rank in range(8):
+                display_col, display_row = self._to_display_coords(file, rank)
                 color = self.theme.light_square if (file + rank) % 2 == 0 else self.theme.dark_square
                 if self.selected_square == (file, rank):
                     color = self.theme.highlight
                 square_rect = QtCore.QRectF(
-                    board_left + file * square_size,
-                    board_top + (7 - rank) * square_size,
+                    board_left + display_col * square_size,
+                    board_top + display_row * square_size,
                     square_size,
                     square_size,
                 )
@@ -130,16 +140,32 @@ class BoardWidget(QtWidgets.QWidget):
                 if (file, rank) in self.highlight_targets:
                     painter.setBrush(QtGui.QColor(self.theme.move_hint))
                     painter.setPen(QtCore.Qt.NoPen)
-                    center_x = board_left + file * square_size + square_size / 2
-                    center_y = board_top + (7 - rank) * square_size + square_size / 2
+                    center_x = board_left + display_col * square_size + square_size / 2
+                    center_y = board_top + display_row * square_size + square_size / 2
                     radius = square_size * 0.12
                     painter.drawEllipse(QtCore.QPointF(center_x, center_y), radius, radius)
 
                 piece = self._piece_at(file, rank)
                 if piece is not None:
-                    if not self._draw_piece_image(painter, piece, file, rank, square_size, board_left, board_top):
+                    if not self._draw_piece_image(
+                        painter,
+                        piece,
+                        display_col,
+                        display_row,
+                        square_size,
+                        board_left,
+                        board_top,
+                    ):
                         piece_symbol = UNICODE_PIECES[piece.symbol()]
-                        self._draw_piece_fallback(painter, piece_symbol, file, rank, square_size, board_left, board_top)
+                        self._draw_piece_fallback(
+                            painter,
+                            piece_symbol,
+                            display_col,
+                            display_row,
+                            square_size,
+                            board_left,
+                            board_top,
+                        )
 
                 # Draw coordinate labels inside edge squares (as in the reference).
                 is_light_square = (file + rank) % 2 == 0
@@ -147,21 +173,21 @@ class BoardWidget(QtWidgets.QWidget):
                 painter.setPen(QtGui.QColor(coord_color))
 
                 inset = square_size * 0.08
-                if rank == 0:
+                if display_row == 7:
                     file_char = chr(ord("a") + file)
                     file_rect = QtCore.QRectF(
-                        board_left + file * square_size,
-                        board_top + (7 - rank) * square_size,
+                        board_left + display_col * square_size,
+                        board_top + display_row * square_size,
                         square_size - inset,
                         square_size - inset,
                     )
                     painter.drawText(file_rect, QtCore.Qt.AlignRight | QtCore.Qt.AlignBottom, file_char)
 
-                if file == 0:
+                if display_col == 0:
                     rank_char = str(rank + 1)
                     rank_rect = QtCore.QRectF(
-                        board_left + file * square_size + inset,
-                        board_top + (7 - rank) * square_size,
+                        board_left + display_col * square_size + inset,
+                        board_top + display_row * square_size,
                         square_size - inset,
                         square_size - inset,
                     )
@@ -206,8 +232,8 @@ class BoardWidget(QtWidgets.QWidget):
         self,
         painter: QtGui.QPainter,
         piece: chess.Piece,
-        file: int,
-        rank: int,
+        display_col: int,
+        display_row: int,
         square_size: float,
         board_left: float,
         board_top: float,
@@ -221,8 +247,8 @@ class BoardWidget(QtWidgets.QWidget):
         if target_size <= 0:
             return False
 
-        x = int(board_left + file * square_size + (square_size - target_size) / 2)
-        y = int(board_top + (7 - rank) * square_size + (square_size - target_size) / 2)
+        x = int(board_left + display_col * square_size + (square_size - target_size) / 2)
+        y = int(board_top + display_row * square_size + (square_size - target_size) / 2)
         target_rect = QtCore.QRect(x, y, target_size, target_size)
         scaled = pixmap.scaled(target_size, target_size, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
         painter.drawPixmap(target_rect, scaled)
@@ -232,8 +258,8 @@ class BoardWidget(QtWidgets.QWidget):
         self,
         painter: QtGui.QPainter,
         piece_symbol: str,
-        file: int,
-        rank: int,
+        display_col: int,
+        display_row: int,
         square_size: float,
         board_left: float,
         board_top: float,
@@ -241,14 +267,24 @@ class BoardWidget(QtWidgets.QWidget):
         piece_font = QtGui.QFont("Segoe UI Symbol", int(square_size / 2.0))
         piece_font.setStyleStrategy(QtGui.QFont.PreferAntialias)
         piece_rect = QtCore.QRectF(
-            board_left + file * square_size,
-            board_top + (7 - rank) * square_size,
+            board_left + display_col * square_size,
+            board_top + display_row * square_size,
             square_size,
             square_size,
         )
         painter.setFont(piece_font)
         painter.setPen(QtGui.QColor(self.theme.black_piece))
         painter.drawText(piece_rect, QtCore.Qt.AlignCenter, piece_symbol)
+
+    def _to_display_coords(self, file: int, rank: int) -> Tuple[int, int]:
+        if self.is_flipped:
+            return 7 - file, rank
+        return file, 7 - rank
+
+    def _from_display_coords(self, display_col: int, display_row: int) -> Tuple[int, int]:
+        if self.is_flipped:
+            return 7 - display_col, display_row
+        return display_col, 7 - display_row
 
     def _board_geometry(self) -> Tuple[QtCore.QRectF, float, float]:
         outer_margin = max(2.0, min(self.width(), self.height()) * 0.01)

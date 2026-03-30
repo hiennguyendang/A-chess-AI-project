@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import sys
-from typing import List
+from pathlib import Path
+from typing import Dict, List
 
 import chess
 from PyQt5 import QtCore, QtWidgets
@@ -36,6 +37,27 @@ class MainWindow(QtWidgets.QMainWindow):
     GAME_AI_VS_AI = "ai_vs_ai"
     GAME_TEST_AB = "test_alphabeta"
     GAME_TEST_MCTS = "test_mcts"
+    PIECE_VALUES: Dict[chess.PieceType, int] = {
+        chess.PAWN: 1,
+        chess.KNIGHT: 3,
+        chess.BISHOP: 3,
+        chess.ROOK: 5,
+        chess.QUEEN: 9,
+    }
+    START_COUNTS: Dict[chess.PieceType, int] = {
+        chess.PAWN: 8,
+        chess.KNIGHT: 2,
+        chess.BISHOP: 2,
+        chess.ROOK: 2,
+        chess.QUEEN: 1,
+    }
+    PIECE_CODES: Dict[chess.PieceType, str] = {
+        chess.PAWN: "p",
+        chess.KNIGHT: "n",
+        chess.BISHOP: "b",
+        chess.ROOK: "r",
+        chess.QUEEN: "q",
+    }
 
     def __init__(self, settings: Settings) -> None:
         super().__init__()
@@ -50,15 +72,22 @@ class MainWindow(QtWidgets.QMainWindow):
         self.game_mode = self.GAME_HUMAN_VS_AI
         self.active_ai = "alphabeta"
         self.human_ai_depth = settings.default_depth
+        self.human_mcts_simulations = settings.default_simulations
+        self.human_mcts_rollout_depth = settings.default_depth
         self.white_ai = "alphabeta"
         self.white_ai_depth = settings.default_depth
+        self.white_mcts_simulations = settings.default_simulations
+        self.white_mcts_rollout_depth = settings.default_depth
         self.black_ai = "mcts"
         self.black_ai_depth = settings.default_depth
+        self.black_mcts_simulations = settings.default_simulations
+        self.black_mcts_rollout_depth = settings.default_depth
         self.move_history_lines: List[str] = []
         self.selected_mode = self.GAME_HUMAN_VS_AI
 
         self.minimax_batch_window = None
         self.mcts_batch_window = None
+        self.piece_img_dir = Path(__file__).resolve().parent.parent / "imgs" / "piece"
 
         self.ai_timer = QtCore.QTimer(self)
         self.ai_timer.setInterval(self.settings.ai_turn_interval_ms)
@@ -208,11 +237,39 @@ class MainWindow(QtWidgets.QMainWindow):
         self.options_ai_selector = QtWidgets.QComboBox()
         self.options_ai_selector.addItem("Alpha-Beta", "alphabeta")
         self.options_ai_selector.addItem("Monte Carlo", "mcts")
+        self.options_ai_selector.currentIndexChanged.connect(self._update_engine_specific_rows)
         row_ai_layout.addWidget(self.options_ai_selector)
         self.row_ai.setLayout(row_ai_layout)
         self.label_ai = QtWidgets.QLabel("AI Engine")
         form.addRow(self.label_ai, self.row_ai)
         self.option_rows["ai"] = (self.label_ai, self.row_ai)
+
+        self.row_mcts_sim = QtWidgets.QWidget()
+        row_mcts_sim_layout = QtWidgets.QHBoxLayout()
+        row_mcts_sim_layout.setContentsMargins(0, 0, 0, 0)
+        self.options_mcts_sim_selector = QtWidgets.QSpinBox()
+        self.options_mcts_sim_selector.setRange(100, 20000)
+        self.options_mcts_sim_selector.setSingleStep(100)
+        self.options_mcts_sim_selector.setValue(self.settings.default_simulations)
+        self.options_mcts_sim_selector.setSuffix(" sims")
+        row_mcts_sim_layout.addWidget(self.options_mcts_sim_selector)
+        self.row_mcts_sim.setLayout(row_mcts_sim_layout)
+        self.label_mcts_sim = QtWidgets.QLabel("MCTS Simulations")
+        form.addRow(self.label_mcts_sim, self.row_mcts_sim)
+        self.option_rows["mcts_sim"] = (self.label_mcts_sim, self.row_mcts_sim)
+
+        self.row_mcts_rollout = QtWidgets.QWidget()
+        row_mcts_rollout_layout = QtWidgets.QHBoxLayout()
+        row_mcts_rollout_layout.setContentsMargins(0, 0, 0, 0)
+        self.options_mcts_rollout_selector = QtWidgets.QSpinBox()
+        self.options_mcts_rollout_selector.setRange(1, 64)
+        self.options_mcts_rollout_selector.setValue(self.settings.default_depth)
+        self.options_mcts_rollout_selector.setSuffix(" plies")
+        row_mcts_rollout_layout.addWidget(self.options_mcts_rollout_selector)
+        self.row_mcts_rollout.setLayout(row_mcts_rollout_layout)
+        self.label_mcts_rollout = QtWidgets.QLabel("MCTS Rollout Depth")
+        form.addRow(self.label_mcts_rollout, self.row_mcts_rollout)
+        self.option_rows["mcts_rollout"] = (self.label_mcts_rollout, self.row_mcts_rollout)
 
         self.row_white_ai = QtWidgets.QWidget()
         row_white_layout = QtWidgets.QHBoxLayout()
@@ -220,6 +277,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.options_white_ai_selector = QtWidgets.QComboBox()
         self.options_white_ai_selector.addItem("Alpha-Beta", "alphabeta")
         self.options_white_ai_selector.addItem("Monte Carlo", "mcts")
+        self.options_white_ai_selector.currentIndexChanged.connect(self._update_engine_specific_rows)
         row_white_layout.addWidget(self.options_white_ai_selector)
         self.row_white_ai.setLayout(row_white_layout)
         self.label_white_ai = QtWidgets.QLabel("White AI")
@@ -239,6 +297,33 @@ class MainWindow(QtWidgets.QMainWindow):
         form.addRow(self.label_white_depth, self.row_white_depth)
         self.option_rows["white_depth"] = (self.label_white_depth, self.row_white_depth)
 
+        self.row_white_mcts_sim = QtWidgets.QWidget()
+        row_white_mcts_sim_layout = QtWidgets.QHBoxLayout()
+        row_white_mcts_sim_layout.setContentsMargins(0, 0, 0, 0)
+        self.options_white_mcts_sim_selector = QtWidgets.QSpinBox()
+        self.options_white_mcts_sim_selector.setRange(100, 20000)
+        self.options_white_mcts_sim_selector.setSingleStep(100)
+        self.options_white_mcts_sim_selector.setValue(self.settings.default_simulations)
+        self.options_white_mcts_sim_selector.setSuffix(" sims")
+        row_white_mcts_sim_layout.addWidget(self.options_white_mcts_sim_selector)
+        self.row_white_mcts_sim.setLayout(row_white_mcts_sim_layout)
+        self.label_white_mcts_sim = QtWidgets.QLabel("White MCTS Simulations")
+        form.addRow(self.label_white_mcts_sim, self.row_white_mcts_sim)
+        self.option_rows["white_mcts_sim"] = (self.label_white_mcts_sim, self.row_white_mcts_sim)
+
+        self.row_white_mcts_rollout = QtWidgets.QWidget()
+        row_white_mcts_rollout_layout = QtWidgets.QHBoxLayout()
+        row_white_mcts_rollout_layout.setContentsMargins(0, 0, 0, 0)
+        self.options_white_mcts_rollout_selector = QtWidgets.QSpinBox()
+        self.options_white_mcts_rollout_selector.setRange(1, 64)
+        self.options_white_mcts_rollout_selector.setValue(self.settings.default_depth)
+        self.options_white_mcts_rollout_selector.setSuffix(" plies")
+        row_white_mcts_rollout_layout.addWidget(self.options_white_mcts_rollout_selector)
+        self.row_white_mcts_rollout.setLayout(row_white_mcts_rollout_layout)
+        self.label_white_mcts_rollout = QtWidgets.QLabel("White MCTS Rollout Depth")
+        form.addRow(self.label_white_mcts_rollout, self.row_white_mcts_rollout)
+        self.option_rows["white_mcts_rollout"] = (self.label_white_mcts_rollout, self.row_white_mcts_rollout)
+
         self.row_black_ai = QtWidgets.QWidget()
         row_black_layout = QtWidgets.QHBoxLayout()
         row_black_layout.setContentsMargins(0, 0, 0, 0)
@@ -246,6 +331,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.options_black_ai_selector.addItem("Alpha-Beta", "alphabeta")
         self.options_black_ai_selector.addItem("Monte Carlo", "mcts")
         self.options_black_ai_selector.setCurrentText("mcts")
+        self.options_black_ai_selector.currentIndexChanged.connect(self._update_engine_specific_rows)
         row_black_layout.addWidget(self.options_black_ai_selector)
         self.row_black_ai.setLayout(row_black_layout)
         self.label_black_ai = QtWidgets.QLabel("Black AI")
@@ -264,6 +350,33 @@ class MainWindow(QtWidgets.QMainWindow):
         self.label_black_depth = QtWidgets.QLabel("Black AI Depth")
         form.addRow(self.label_black_depth, self.row_black_depth)
         self.option_rows["black_depth"] = (self.label_black_depth, self.row_black_depth)
+
+        self.row_black_mcts_sim = QtWidgets.QWidget()
+        row_black_mcts_sim_layout = QtWidgets.QHBoxLayout()
+        row_black_mcts_sim_layout.setContentsMargins(0, 0, 0, 0)
+        self.options_black_mcts_sim_selector = QtWidgets.QSpinBox()
+        self.options_black_mcts_sim_selector.setRange(100, 20000)
+        self.options_black_mcts_sim_selector.setSingleStep(100)
+        self.options_black_mcts_sim_selector.setValue(self.settings.default_simulations)
+        self.options_black_mcts_sim_selector.setSuffix(" sims")
+        row_black_mcts_sim_layout.addWidget(self.options_black_mcts_sim_selector)
+        self.row_black_mcts_sim.setLayout(row_black_mcts_sim_layout)
+        self.label_black_mcts_sim = QtWidgets.QLabel("Black MCTS Simulations")
+        form.addRow(self.label_black_mcts_sim, self.row_black_mcts_sim)
+        self.option_rows["black_mcts_sim"] = (self.label_black_mcts_sim, self.row_black_mcts_sim)
+
+        self.row_black_mcts_rollout = QtWidgets.QWidget()
+        row_black_mcts_rollout_layout = QtWidgets.QHBoxLayout()
+        row_black_mcts_rollout_layout.setContentsMargins(0, 0, 0, 0)
+        self.options_black_mcts_rollout_selector = QtWidgets.QSpinBox()
+        self.options_black_mcts_rollout_selector.setRange(1, 64)
+        self.options_black_mcts_rollout_selector.setValue(self.settings.default_depth)
+        self.options_black_mcts_rollout_selector.setSuffix(" plies")
+        row_black_mcts_rollout_layout.addWidget(self.options_black_mcts_rollout_selector)
+        self.row_black_mcts_rollout.setLayout(row_black_mcts_rollout_layout)
+        self.label_black_mcts_rollout = QtWidgets.QLabel("Black MCTS Rollout Depth")
+        form.addRow(self.label_black_mcts_rollout, self.row_black_mcts_rollout)
+        self.option_rows["black_mcts_rollout"] = (self.label_black_mcts_rollout, self.row_black_mcts_rollout)
 
         card_layout.addLayout(form)
 
@@ -331,6 +444,14 @@ class MainWindow(QtWidgets.QMainWindow):
         menu_btn.clicked.connect(self.on_back_to_menu)
         side_panel.addWidget(menu_btn)
 
+        self.material_stats_label = QtWidgets.QLabel()
+        self.material_stats_label.setObjectName("material_stats")
+        self.material_stats_label.setWordWrap(True)
+        self.material_stats_label.setTextFormat(QtCore.Qt.RichText)
+        self.material_stats_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop)
+        self.material_stats_label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+        side_panel.addWidget(self.material_stats_label)
+
         side_panel.addStretch(1)
         return page
 
@@ -349,6 +470,15 @@ class MainWindow(QtWidgets.QMainWindow):
             QLabel#menu_hint {{ color: #D8D1F4; background: #35295A; border: 1px solid #5F4D9A; padding: 8px; border-radius: 6px; }}
             QLabel#title {{ font-size: 18px; font-weight: 700; color: {self.theme.text_primary}; }}
             QLabel#status {{ color: {self.theme.text_muted}; background: {self.theme.panel_bg}; padding: 8px; border-radius: 6px; }}
+            QLabel#material_stats {{
+                color: {self.theme.text_primary};
+                background: {self.theme.panel_bg};
+                border: 1px solid {self.theme.accent};
+                border-radius: 6px;
+                padding: 8px;
+                font-family: Consolas;
+                font-size: 13px;
+            }}
             QLabel#history_title {{ font-size: 15px; font-weight: 600; }}
             QComboBox, QPushButton, QPlainTextEdit {{
                 background: {self.theme.panel_bg};
@@ -398,7 +528,7 @@ class MainWindow(QtWidgets.QMainWindow):
              }}
              QPushButton#mode_continue_btn:hover {{ background: #6E58B2; color: #FFFFFF; }}
              QPlainTextEdit#history_box {{ font-family: Consolas; font-size: 13px; }}
-             QPushButton:hover {{ background: {self.theme.accent}; color: #111; }}
+             QPushButton:hover {{ background: {self.theme.accent}; color: #F8F4FF; }}
              """
          )
 
@@ -408,6 +538,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setup_layers.setCurrentWidget(self.options_layer)
 
     def _set_option_row_visible(self, key: str, visible: bool) -> None:
+        if key not in self.option_rows:
+            return
         label, widget = self.option_rows[key]
         label.setVisible(visible)
         widget.setVisible(visible)
@@ -419,88 +551,157 @@ class MainWindow(QtWidgets.QMainWindow):
         is_aiva = mode == self.GAME_AI_VS_AI
 
         self._set_option_row_visible("depth", not is_aiva)
+        self._set_option_row_visible("mcts_sim", False)
+        self._set_option_row_visible("mcts_rollout", False)
         self._set_option_row_visible("side", is_hva)
         self._set_option_row_visible("ai", is_hva)
         self._set_option_row_visible("white_ai", is_aiva)
         self._set_option_row_visible("white_depth", is_aiva)
+        self._set_option_row_visible("white_mcts_sim", False)
+        self._set_option_row_visible("white_mcts_rollout", False)
         self._set_option_row_visible("black_ai", is_aiva)
         self._set_option_row_visible("black_depth", is_aiva)
+        self._set_option_row_visible("black_mcts_sim", False)
+        self._set_option_row_visible("black_mcts_rollout", False)
 
         if is_hva:
-            self.label_depth.setText("AI Depth")
-            self.options_hint.setText("Choose side, AI engine, and depth. In game screen, only board + move history are shown.")
+            self.label_depth.setText("Alpha-Beta Depth")
+            self.options_hint.setText("Choose side and AI. Alpha-Beta uses depth; Monte Carlo uses simulations + rollout depth.")
             self.options_start_btn.setText("Start Game")
         elif is_aiva:
-            self.label_depth.setText("AI Depth")
-            self.options_hint.setText("Select white/black engines and set depth separately for each AI.")
+            self.options_hint.setText("Set each side separately. Alpha-Beta uses depth; Monte Carlo uses simulations + rollout depth.")
             self.options_start_btn.setText("Start Game")
         elif mode == self.GAME_TEST_AB:
             self.label_depth.setText("Alpha-Beta Depth")
             self.options_hint.setText("Open 10-board benchmark window with selected depth (Minimax vs Random).")
             self.options_start_btn.setText("Open Test")
         else:
-            self.label_depth.setText("Monte Carlo Rollout Depth")
-            self.options_hint.setText("Open 10-board benchmark window for Monte Carlo vs Random with real rollout depth.")
+            self.options_hint.setText("Open 10-board benchmark window for Monte Carlo vs Random using simulations + rollout depth.")
             self.options_start_btn.setText("Open Test")
 
-    def _apply_ai_config_from_options(self) -> None:
+        self._update_engine_specific_rows()
+
+    def _update_engine_specific_rows(self) -> None:
+        mode = self.selected_mode
+        is_hva = mode == self.GAME_HUMAN_VS_AI
+        is_aiva = mode == self.GAME_AI_VS_AI
+
+        if mode == self.GAME_TEST_AB:
+            self._set_option_row_visible("depth", True)
+            self._set_option_row_visible("mcts_sim", False)
+            self._set_option_row_visible("mcts_rollout", False)
+            return
+
+        if mode == self.GAME_TEST_MCTS:
+            self._set_option_row_visible("depth", False)
+            self._set_option_row_visible("mcts_sim", True)
+            self._set_option_row_visible("mcts_rollout", True)
+            return
+
+        if is_hva:
+            is_mcts = self.options_ai_selector.currentData() == "mcts"
+            self._set_option_row_visible("depth", not is_mcts)
+            self._set_option_row_visible("mcts_sim", is_mcts)
+            self._set_option_row_visible("mcts_rollout", is_mcts)
+            return
+
+        if is_aiva:
+            white_is_mcts = self.options_white_ai_selector.currentData() == "mcts"
+            black_is_mcts = self.options_black_ai_selector.currentData() == "mcts"
+
+            self._set_option_row_visible("white_depth", not white_is_mcts)
+            self._set_option_row_visible("white_mcts_sim", white_is_mcts)
+            self._set_option_row_visible("white_mcts_rollout", white_is_mcts)
+
+            self._set_option_row_visible("black_depth", not black_is_mcts)
+            self._set_option_row_visible("black_mcts_sim", black_is_mcts)
+            self._set_option_row_visible("black_mcts_rollout", black_is_mcts)
+
+    def _apply_alphabeta_from_options(self) -> None:
         depth = self.options_depth_selector.value()
-        sims = self._depth_to_simulations(depth)
-
         self.settings.default_depth = depth
-        self.settings.default_simulations = sims
         self.alpha_beta.depth = depth
-        self.mcts.simulations = sims
-        self.mcts.rollout_depth = depth
 
-    @staticmethod
-    def _depth_to_simulations(depth: int) -> int:
-        return max(120, depth * 220)
+    def _apply_mcts_from_options(self) -> None:
+        simulations = self.options_mcts_sim_selector.value()
+        rollout_depth = self.options_mcts_rollout_selector.value()
+        self.settings.default_simulations = simulations
+        self.settings.default_depth = rollout_depth
+        self.mcts.simulations = simulations
+        self.mcts.rollout_depth = rollout_depth
 
     def _on_start_from_options(self) -> None:
         mode = self.selected_mode
 
         if mode == self.GAME_TEST_AB:
-            self._apply_ai_config_from_options()
+            self._apply_alphabeta_from_options()
             self.on_open_minimax_batch()
             return
         if mode == self.GAME_TEST_MCTS:
-            self._apply_ai_config_from_options()
+            self._apply_mcts_from_options()
             self.on_open_mcts_batch()
             return
 
         self.game_mode = mode
 
         if mode == self.GAME_HUMAN_VS_AI:
-            self._apply_ai_config_from_options()
             self.human_color = chess.WHITE if self.options_side_selector.currentData() == "white" else chess.BLACK
             self.active_ai = self.options_ai_selector.currentData()
-            self.human_ai_depth = self.options_depth_selector.value()
+            if self.active_ai == "alphabeta":
+                self.human_ai_depth = self.options_depth_selector.value()
+                self.settings.default_depth = self.human_ai_depth
+            else:
+                self.human_mcts_simulations = self.options_mcts_sim_selector.value()
+                self.human_mcts_rollout_depth = self.options_mcts_rollout_selector.value()
+                self.settings.default_simulations = self.human_mcts_simulations
+                self.settings.default_depth = self.human_mcts_rollout_depth
         else:
             self.white_ai = self.options_white_ai_selector.currentData()
             self.black_ai = self.options_black_ai_selector.currentData()
-            self.white_ai_depth = self.options_white_depth_selector.value()
-            self.black_ai_depth = self.options_black_depth_selector.value()
+            if self.white_ai == "alphabeta":
+                self.white_ai_depth = self.options_white_depth_selector.value()
+            else:
+                self.white_mcts_simulations = self.options_white_mcts_sim_selector.value()
+                self.white_mcts_rollout_depth = self.options_white_mcts_rollout_selector.value()
+
+            if self.black_ai == "alphabeta":
+                self.black_ai_depth = self.options_black_depth_selector.value()
+            else:
+                self.black_mcts_simulations = self.options_black_mcts_sim_selector.value()
+                self.black_mcts_rollout_depth = self.options_black_mcts_rollout_selector.value()
 
         self._start_game_session()
 
     def _start_game_session(self) -> None:
         self.ai_timer.stop()
         self.board.reset()
+        flip_for_black_human = self.game_mode == self.GAME_HUMAN_VS_AI and self.human_color == chess.BLACK
+        self.board_widget.set_flipped(flip_for_black_human)
         self.board_widget.set_board(self.board)
         self._clear_move_history()
 
         if self.game_mode == self.GAME_HUMAN_VS_AI:
             side_name = "White" if self.human_color == chess.WHITE else "Black"
-            ai_name = "Alpha-Beta" if self.active_ai == "alphabeta" else "Monte Carlo"
-            self.game_title_label.setText(f"Human vs AI ({ai_name}, d={self.human_ai_depth}) | You: {side_name}")
+            if self.active_ai == "alphabeta":
+                ai_info = f"Alpha-Beta (d={self.human_ai_depth})"
+            else:
+                ai_info = f"Monte Carlo (sim={self.human_mcts_simulations}, rd={self.human_mcts_rollout_depth})"
+            self.game_title_label.setText(f"Human vs AI ({ai_info}) | You: {side_name}")
             self.toggle_ai_btn.hide()
         else:
-            white_name = "Alpha-Beta" if self.white_ai == "alphabeta" else "Monte Carlo"
-            black_name = "Alpha-Beta" if self.black_ai == "alphabeta" else "Monte Carlo"
+            if self.white_ai == "alphabeta":
+                white_name = f"Alpha-Beta (d={self.white_ai_depth})"
+            else:
+                white_name = f"Monte Carlo (sim={self.white_mcts_simulations}, rd={self.white_mcts_rollout_depth})"
+
+            if self.black_ai == "alphabeta":
+                black_name = f"Alpha-Beta (d={self.black_ai_depth})"
+            else:
+                black_name = f"Monte Carlo (sim={self.black_mcts_simulations}, rd={self.black_mcts_rollout_depth})"
+
             self.game_title_label.setText(
-                f"AI vs AI | White: {white_name} (d={self.white_ai_depth}) | "
-                f"Black: {black_name} (d={self.black_ai_depth})"
+                f"AI vs AI | White: {white_name} | "
+                f"Black: {black_name}"
             )
             self.toggle_ai_btn.show()
             self.toggle_ai_btn.setText("Stop AI vs AI")
@@ -539,29 +740,108 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _pick_ai_move(self):
         if self.game_mode == self.GAME_HUMAN_VS_AI:
-            return self._pick_engine_move(self.active_ai, self.human_ai_depth)
+            if self.active_ai == "alphabeta":
+                return self._pick_engine_move(self.active_ai, depth=self.human_ai_depth)
+            return self._pick_engine_move(
+                self.active_ai,
+                simulations=self.human_mcts_simulations,
+                rollout_depth=self.human_mcts_rollout_depth,
+            )
 
         if self.board.turn == chess.WHITE:
-            return self._pick_engine_move(self.white_ai, self.white_ai_depth)
-        return self._pick_engine_move(self.black_ai, self.black_ai_depth)
+            if self.white_ai == "alphabeta":
+                return self._pick_engine_move(self.white_ai, depth=self.white_ai_depth)
+            return self._pick_engine_move(
+                self.white_ai,
+                simulations=self.white_mcts_simulations,
+                rollout_depth=self.white_mcts_rollout_depth,
+            )
 
-    def _pick_engine_move(self, engine_name: str, depth: int):
+        if self.black_ai == "alphabeta":
+            return self._pick_engine_move(self.black_ai, depth=self.black_ai_depth)
+        return self._pick_engine_move(
+            self.black_ai,
+            simulations=self.black_mcts_simulations,
+            rollout_depth=self.black_mcts_rollout_depth,
+        )
+
+    def _pick_engine_move(
+        self,
+        engine_name: str,
+        depth: int = 1,
+        simulations: int = 500,
+        rollout_depth: int = 3,
+    ):
         if engine_name == "alphabeta":
             return AlphaBetaAI(depth=max(1, depth)).choose_move(self.board)
-        simulations = self._depth_to_simulations(depth)
-        return MCTS(simulations=simulations, rollout_depth=max(1, depth)).choose_move(self.board)
+        return MCTS(
+            simulations=max(1, simulations),
+            rollout_depth=max(1, rollout_depth),
+        ).choose_move(self.board)
 
     def _refresh_status(self) -> None:
         if self.board.is_checkmate():
             winner = "Black" if self.board.turn == chess.WHITE else "White"
             self.status_label.setText(f"Checkmate. {winner} wins.")
+            self._update_material_stats()
             return
         if self.board.is_stalemate():
             self.status_label.setText("Stalemate.")
+            self._update_material_stats()
             return
         side = "White" if self.board.turn == chess.WHITE else "Black"
         check = " (check)" if self.board.is_check() else ""
         self.status_label.setText(f"Turn: {side}{check}")
+        self._update_material_stats()
+
+    def _captured_piece_codes(self, captured_color: chess.Color) -> List[str]:
+        board = self.board.to_python_chess()
+        prefix = "w" if captured_color == chess.WHITE else "b"
+        codes: List[str] = []
+
+        for piece_type in (chess.PAWN, chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN):
+            remaining = len(board.pieces(piece_type, captured_color))
+            missing = max(0, self.START_COUNTS[piece_type] - remaining)
+            codes.extend([f"{prefix}{self.PIECE_CODES[piece_type]}"] * missing)
+        return codes
+
+    def _captured_points(self, captured_codes: List[str]) -> int:
+        symbol_values = {"p": 1, "n": 3, "b": 3, "r": 5, "q": 9}
+        return sum(symbol_values.get(code[1], 0) for code in captured_codes)
+
+    def _piece_icon_html(self, piece_code: str, icon_px: int) -> str:
+        image_path = self.piece_img_dir / f"{piece_code}.png"
+        if not image_path.exists():
+            return piece_code
+        src = image_path.as_posix()
+        return (
+            f"<img src=\"{src}\" width=\"{icon_px}\" height=\"{icon_px}\" "
+            f"style=\"vertical-align: middle; margin-right: 2px;\"/>"
+        )
+
+    def _captured_icons_html(self, captured_codes: List[str], icon_px: int) -> str:
+        if not captured_codes:
+            return "-"
+        return " ".join(self._piece_icon_html(code, icon_px) for code in captured_codes)
+
+    def _update_material_stats(self) -> None:
+        white_captured = self._captured_piece_codes(chess.BLACK)
+        black_captured = self._captured_piece_codes(chess.WHITE)
+
+        white_points = self._captured_points(white_captured)
+        black_points = self._captured_points(black_captured)
+        diff = white_points - black_points
+
+        white_adv = max(0, diff)
+        black_adv = max(0, -diff)
+
+        icon_px = max(14, self.material_stats_label.fontMetrics().height())
+        white_list = self._captured_icons_html(white_captured, icon_px)
+        black_list = self._captured_icons_html(black_captured, icon_px)
+        self.material_stats_label.setText(
+            f"White (+{white_adv}): {white_list}<br/>"
+            f"Black (+{black_adv}): {black_list}"
+        )
 
     def _kick_ai_if_needed(self) -> None:
         if self.board.is_game_over():
