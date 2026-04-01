@@ -49,20 +49,13 @@ class Board:
         return [move for move in self._board.legal_moves if move.from_square == from_square]
 
     def is_game_over(self) -> bool:
-        return (
-            self.is_checkmate()
-            or self.is_stalemate()
-            or self.is_draw_by_fifty_move_rule()
-            or self.is_draw_by_insufficient_material()
-        )
+        # Keep this aligned with python-chess so GUI/game loop agree on terminal states.
+        # claim_draw=False means automatic end conditions only (e.g., checkmate, stalemate,
+        # insufficient material, fivefold repetition, 75-move rule).
+        return self._board.is_game_over(claim_draw=False)
 
     def result(self) -> str:
-        if self.is_checkmate():
-            # When side to move is checkmated, that side loses.
-            return "0-1" if self._board.turn == chess.WHITE else "1-0"
-        if self.is_stalemate() or self.is_draw_by_fifty_move_rule() or self.is_draw_by_insufficient_material():
-            return "1/2-1/2"
-        return "*"
+        return self._board.result(claim_draw=False)
 
     def is_check(self) -> bool:
         return self._board.is_check()
@@ -74,8 +67,7 @@ class Board:
         return self._board.is_stalemate()
 
     def is_draw_by_fifty_move_rule(self) -> bool:
-        # 50-move rule means 100 half-moves without pawn move or capture.
-        return self._board.halfmove_clock >= 100
+        return self._board.can_claim_fifty_moves()
 
     def is_draw_by_insufficient_material(self) -> bool:
         return self._board.is_insufficient_material()

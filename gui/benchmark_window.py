@@ -332,4 +332,8 @@ class MCTSBatchWindow(BaseBatchWindow):
             simulations=simulations,
             rollout_depth=rollout_depth,
             use_heuristic_eval=self.settings.default_mcts_use_heuristic,
+            num_threads=max(1, self.settings.default_mcts_processes),
+            rollout_eval_mix_alpha=self.settings.default_mcts_rollout_eval_mix_alpha,
+            use_biased_rollout=self.settings.default_mcts_use_biased_rollout,
+            rollout_mix_extra_depth=max(1, self.settings.default_mcts_rollout_mix_extra_depth),
         )

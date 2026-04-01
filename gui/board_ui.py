@@ -242,16 +242,7 @@ class BoardWidget(QtWidgets.QWidget):
         result_text = self._game_result_text()
         if result_text:
             painter.fillRect(board_rect, QtGui.QColor(0, 0, 0, 88))
-
-            result_font = QtGui.QFont("Segoe UI", max(24, int(square_size * 0.72)))
-            result_font.setBold(True)
-            painter.setFont(result_font)
-
-            # Draw a dark shadow first so yellow text remains readable on any square color.
-            painter.setPen(QtGui.QColor(20, 20, 20, 230))
-            painter.drawText(board_rect.translated(2.0, 2.0), QtCore.Qt.AlignCenter, result_text)
-            painter.setPen(QtGui.QColor("#F5D547"))
-            painter.drawText(board_rect, QtCore.Qt.AlignCenter, result_text)
+            self._draw_result_overlay(painter, board_rect, square_size, result_text)
 
         if self.pending_promotion is not None:
             self._draw_promotion_overlay(painter, board_rect, square_size)
@@ -355,6 +346,66 @@ class BoardWidget(QtWidgets.QWidget):
             winner = "Black" if board.turn == chess.WHITE else "White"
             return f"{winner} Win"
         return "Draw"
+
+    def _draw_reason_short(self) -> str:
+        board = self.board.to_python_chess()
+        if board.is_stalemate():
+            return "stalemate"
+        if board.is_insufficient_material():
+            return "insufficient material"
+        if board.is_seventyfive_moves():
+            return "75-move rule"
+        if board.is_fivefold_repetition():
+            return "fivefold repetition"
+        return "draw by rule"
+
+    def _draw_result_overlay(
+        self,
+        painter: QtGui.QPainter,
+        board_rect: QtCore.QRectF,
+        square_size: float,
+        result_text: str,
+    ) -> None:
+        main_font = QtGui.QFont("Segoe UI", max(24, int(square_size * 0.72)))
+        main_font.setBold(True)
+
+        if result_text != "Draw":
+            painter.setFont(main_font)
+            painter.setPen(QtGui.QColor(20, 20, 20, 230))
+            painter.drawText(board_rect.translated(2.0, 2.0), QtCore.Qt.AlignCenter, result_text)
+            painter.setPen(QtGui.QColor("#F5D547"))
+            painter.drawText(board_rect, QtCore.Qt.AlignCenter, result_text)
+            return
+
+        center_y = board_rect.center().y()
+        main_rect = QtCore.QRectF(
+            board_rect.left(),
+            center_y - square_size * 1.05,
+            board_rect.width(),
+            square_size * 0.95,
+        )
+
+        reason_font = QtGui.QFont("Segoe UI", max(9, int(square_size * 0.18)))
+        reason_font.setBold(False)
+        reason_text = f"Reason: {self._draw_reason_short()}"
+        reason_rect = QtCore.QRectF(
+            board_rect.left(),
+            center_y + square_size * 0.04,
+            board_rect.width(),
+            square_size * 0.42,
+        )
+
+        painter.setFont(main_font)
+        painter.setPen(QtGui.QColor(20, 20, 20, 230))
+        painter.drawText(main_rect.translated(2.0, 2.0), QtCore.Qt.AlignCenter, result_text)
+        painter.setPen(QtGui.QColor("#F5D547"))
+        painter.drawText(main_rect, QtCore.Qt.AlignCenter, result_text)
+
+        painter.setFont(reason_font)
+        painter.setPen(QtGui.QColor(20, 20, 20, 230))
+        painter.drawText(reason_rect.translated(1.5, 1.5), QtCore.Qt.AlignCenter, reason_text)
+        painter.setPen(QtGui.QColor("#F5D547"))
+        painter.drawText(reason_rect, QtCore.Qt.AlignCenter, reason_text)
 
     def _promotion_option_rects(self, board_rect: QtCore.QRectF, square_size: float) -> List[QtCore.QRectF]:
         assert self.pending_promotion is not None

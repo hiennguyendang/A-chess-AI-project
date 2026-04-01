@@ -2,14 +2,17 @@
 from __future__ import annotations
 
 import sys
+import time
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import chess
 from PyQt5 import QtCore, QtWidgets
 
 from ai.alphabeta import AlphaBetaAI
 from ai.mcts import MCTS
+from ai.minimax import MinimaxAI
 from config.settings import Settings
 from engine.board import Board
 from gui.benchmark_window import MCTSBatchWindow, MinimaxBatchWindow
@@ -66,11 +69,18 @@ class MainWindow(QtWidgets.QMainWindow):
         self.theme = Theme.chesscom()
 
         self.board = Board()
-        self.alpha_beta = AlphaBetaAI(depth=settings.default_depth)
+        self.alpha_beta = AlphaBetaAI(
+            depth=settings.default_depth,
+            num_processes=max(1, settings.default_alphabeta_processes),
+        )
         self.mcts = MCTS(
             simulations=settings.default_simulations,
             rollout_depth=settings.default_depth,
             use_heuristic_eval=settings.default_mcts_use_heuristic,
+            num_threads=max(1, settings.default_mcts_processes),
+            rollout_eval_mix_alpha=settings.default_mcts_rollout_eval_mix_alpha,
+            use_biased_rollout=settings.default_mcts_use_biased_rollout,
+            rollout_mix_extra_depth=max(1, settings.default_mcts_rollout_mix_extra_depth),
         )
         self.human_color = chess.WHITE
         self.game_mode = self.GAME_HUMAN_VS_AI
@@ -90,6 +100,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.black_mcts_rollout_depth = settings.default_depth
         self.black_mcts_use_heuristic = settings.default_mcts_use_heuristic
         self.move_history_lines: List[str] = []
+        self.white_captured_order: List[str] = []
+        self.black_captured_order: List[str] = []
         self.selected_mode = self.GAME_HUMAN_VS_AI
 
         self.minimax_batch_window = None
@@ -100,9 +112,20 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ai_timer.setInterval(self.settings.ai_turn_interval_ms)
         self.ai_timer.timeout.connect(self._on_ai_timer_tick)
 
-        self.game_elapsed_seconds = 0
+        self.ai_executor = ThreadPoolExecutor(max_workers=1)
+        self.ai_future: Optional[Future] = None
+        self.ai_task_fen: Optional[str] = None
+        self.ai_task_mode: Optional[str] = None
+        self.ai_result_timer = QtCore.QTimer(self)
+        self.ai_result_timer.setInterval(30)
+        self.ai_result_timer.timeout.connect(self._on_ai_result_tick)
+
+        self.white_elapsed_seconds = 0.0
+        self.black_elapsed_seconds = 0.0
+        self.active_clock_color: Optional[chess.Color] = None
+        self.clock_last_update_ts = 0.0
         self.game_clock_timer = QtCore.QTimer(self)
-        self.game_clock_timer.setInterval(1000)
+        self.game_clock_timer.setInterval(200)
         self.game_clock_timer.timeout.connect(self._on_game_clock_tick)
 
         self._init_ui()
@@ -248,6 +271,7 @@ class MainWindow(QtWidgets.QMainWindow):
         row_ai_layout.setContentsMargins(0, 0, 0, 0)
         self.options_ai_selector = QtWidgets.QComboBox()
         self.options_ai_selector.addItem("Alpha-Beta", "alphabeta")
+        self.options_ai_selector.addItem("Minimax Pure", "minimax")
         self.options_ai_selector.addItem("Monte Carlo", "mcts")
         self.options_ai_selector.currentIndexChanged.connect(self._update_engine_specific_rows)
         row_ai_layout.addWidget(self.options_ai_selector)
@@ -260,7 +284,7 @@ class MainWindow(QtWidgets.QMainWindow):
         row_mcts_sim_layout = QtWidgets.QHBoxLayout()
         row_mcts_sim_layout.setContentsMargins(0, 0, 0, 0)
         self.options_mcts_sim_selector = QtWidgets.QSpinBox()
-        self.options_mcts_sim_selector.setRange(100, 20000)
+        self.options_mcts_sim_selector.setRange(100, 2_147_483_647)
         self.options_mcts_sim_selector.setSingleStep(100)
         self.options_mcts_sim_selector.setValue(self.settings.default_simulations)
         self.options_mcts_sim_selector.setSuffix(" sims")
@@ -274,7 +298,7 @@ class MainWindow(QtWidgets.QMainWindow):
         row_mcts_rollout_layout = QtWidgets.QHBoxLayout()
         row_mcts_rollout_layout.setContentsMargins(0, 0, 0, 0)
         self.options_mcts_rollout_selector = QtWidgets.QSpinBox()
-        self.options_mcts_rollout_selector.setRange(1, 64)
+        self.options_mcts_rollout_selector.setRange(1, 2_147_483_647)
         self.options_mcts_rollout_selector.setValue(self.settings.default_depth)
         self.options_mcts_rollout_selector.setSuffix(" plies")
         row_mcts_rollout_layout.addWidget(self.options_mcts_rollout_selector)
@@ -287,8 +311,8 @@ class MainWindow(QtWidgets.QMainWindow):
         row_mcts_mode_layout = QtWidgets.QHBoxLayout()
         row_mcts_mode_layout.setContentsMargins(0, 0, 0, 0)
         self.options_mcts_mode_selector = QtWidgets.QComboBox()
-        self.options_mcts_mode_selector.addItem("Pure (random rollout)", False)
-        self.options_mcts_mode_selector.addItem("Heuristic (eval at cutoff)", True)
+        self.options_mcts_mode_selector.addItem("Pure (true random rollout)", False)
+        self.options_mcts_mode_selector.addItem("Heuristic (hybrid rollout)", True)
         self.options_mcts_mode_selector.setCurrentIndex(1 if self.settings.default_mcts_use_heuristic else 0)
         row_mcts_mode_layout.addWidget(self.options_mcts_mode_selector)
         self.row_mcts_mode.setLayout(row_mcts_mode_layout)
@@ -301,6 +325,7 @@ class MainWindow(QtWidgets.QMainWindow):
         row_white_layout.setContentsMargins(0, 0, 0, 0)
         self.options_white_ai_selector = QtWidgets.QComboBox()
         self.options_white_ai_selector.addItem("Alpha-Beta", "alphabeta")
+        self.options_white_ai_selector.addItem("Minimax Pure", "minimax")
         self.options_white_ai_selector.addItem("Monte Carlo", "mcts")
         self.options_white_ai_selector.currentIndexChanged.connect(self._update_engine_specific_rows)
         row_white_layout.addWidget(self.options_white_ai_selector)
@@ -326,7 +351,7 @@ class MainWindow(QtWidgets.QMainWindow):
         row_white_mcts_sim_layout = QtWidgets.QHBoxLayout()
         row_white_mcts_sim_layout.setContentsMargins(0, 0, 0, 0)
         self.options_white_mcts_sim_selector = QtWidgets.QSpinBox()
-        self.options_white_mcts_sim_selector.setRange(100, 20000)
+        self.options_white_mcts_sim_selector.setRange(100, 2_147_483_647)
         self.options_white_mcts_sim_selector.setSingleStep(100)
         self.options_white_mcts_sim_selector.setValue(self.settings.default_simulations)
         self.options_white_mcts_sim_selector.setSuffix(" sims")
@@ -340,7 +365,7 @@ class MainWindow(QtWidgets.QMainWindow):
         row_white_mcts_rollout_layout = QtWidgets.QHBoxLayout()
         row_white_mcts_rollout_layout.setContentsMargins(0, 0, 0, 0)
         self.options_white_mcts_rollout_selector = QtWidgets.QSpinBox()
-        self.options_white_mcts_rollout_selector.setRange(1, 64)
+        self.options_white_mcts_rollout_selector.setRange(1, 2_147_483_647)
         self.options_white_mcts_rollout_selector.setValue(self.settings.default_depth)
         self.options_white_mcts_rollout_selector.setSuffix(" plies")
         row_white_mcts_rollout_layout.addWidget(self.options_white_mcts_rollout_selector)
@@ -353,8 +378,8 @@ class MainWindow(QtWidgets.QMainWindow):
         row_white_mcts_mode_layout = QtWidgets.QHBoxLayout()
         row_white_mcts_mode_layout.setContentsMargins(0, 0, 0, 0)
         self.options_white_mcts_mode_selector = QtWidgets.QComboBox()
-        self.options_white_mcts_mode_selector.addItem("Pure (random rollout)", False)
-        self.options_white_mcts_mode_selector.addItem("Heuristic (eval at cutoff)", True)
+        self.options_white_mcts_mode_selector.addItem("Pure (true random rollout)", False)
+        self.options_white_mcts_mode_selector.addItem("Heuristic (hybrid rollout)", True)
         self.options_white_mcts_mode_selector.setCurrentIndex(1 if self.settings.default_mcts_use_heuristic else 0)
         row_white_mcts_mode_layout.addWidget(self.options_white_mcts_mode_selector)
         self.row_white_mcts_mode.setLayout(row_white_mcts_mode_layout)
@@ -367,6 +392,7 @@ class MainWindow(QtWidgets.QMainWindow):
         row_black_layout.setContentsMargins(0, 0, 0, 0)
         self.options_black_ai_selector = QtWidgets.QComboBox()
         self.options_black_ai_selector.addItem("Alpha-Beta", "alphabeta")
+        self.options_black_ai_selector.addItem("Minimax Pure", "minimax")
         self.options_black_ai_selector.addItem("Monte Carlo", "mcts")
         self.options_black_ai_selector.setCurrentText("mcts")
         self.options_black_ai_selector.currentIndexChanged.connect(self._update_engine_specific_rows)
@@ -393,7 +419,7 @@ class MainWindow(QtWidgets.QMainWindow):
         row_black_mcts_sim_layout = QtWidgets.QHBoxLayout()
         row_black_mcts_sim_layout.setContentsMargins(0, 0, 0, 0)
         self.options_black_mcts_sim_selector = QtWidgets.QSpinBox()
-        self.options_black_mcts_sim_selector.setRange(100, 20000)
+        self.options_black_mcts_sim_selector.setRange(100, 2_147_483_647)
         self.options_black_mcts_sim_selector.setSingleStep(100)
         self.options_black_mcts_sim_selector.setValue(self.settings.default_simulations)
         self.options_black_mcts_sim_selector.setSuffix(" sims")
@@ -407,7 +433,7 @@ class MainWindow(QtWidgets.QMainWindow):
         row_black_mcts_rollout_layout = QtWidgets.QHBoxLayout()
         row_black_mcts_rollout_layout.setContentsMargins(0, 0, 0, 0)
         self.options_black_mcts_rollout_selector = QtWidgets.QSpinBox()
-        self.options_black_mcts_rollout_selector.setRange(1, 64)
+        self.options_black_mcts_rollout_selector.setRange(1, 2_147_483_647)
         self.options_black_mcts_rollout_selector.setValue(self.settings.default_depth)
         self.options_black_mcts_rollout_selector.setSuffix(" plies")
         row_black_mcts_rollout_layout.addWidget(self.options_black_mcts_rollout_selector)
@@ -420,8 +446,8 @@ class MainWindow(QtWidgets.QMainWindow):
         row_black_mcts_mode_layout = QtWidgets.QHBoxLayout()
         row_black_mcts_mode_layout.setContentsMargins(0, 0, 0, 0)
         self.options_black_mcts_mode_selector = QtWidgets.QComboBox()
-        self.options_black_mcts_mode_selector.addItem("Pure (random rollout)", False)
-        self.options_black_mcts_mode_selector.addItem("Heuristic (eval at cutoff)", True)
+        self.options_black_mcts_mode_selector.addItem("Pure (true random rollout)", False)
+        self.options_black_mcts_mode_selector.addItem("Heuristic (hybrid rollout)", True)
         self.options_black_mcts_mode_selector.setCurrentIndex(1 if self.settings.default_mcts_use_heuristic else 0)
         row_black_mcts_mode_layout.addWidget(self.options_black_mcts_mode_selector)
         self.row_black_mcts_mode.setLayout(row_black_mcts_mode_layout)
@@ -462,18 +488,36 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.timer_box = QtWidgets.QFrame()
         self.timer_box.setObjectName("timer_box")
-        timer_box_layout = QtWidgets.QHBoxLayout()
-        timer_box_layout.setContentsMargins(10, 6, 10, 6)
-        timer_box_layout.setSpacing(8)
+        timer_box_layout = QtWidgets.QVBoxLayout()
+        timer_box_layout.setContentsMargins(10, 8, 10, 8)
+        timer_box_layout.setSpacing(6)
         self.timer_box.setLayout(timer_box_layout)
 
         timer_label = QtWidgets.QLabel("Timer")
         timer_label.setObjectName("timer_label")
         timer_box_layout.addWidget(timer_label)
 
-        self.timer_value_label = QtWidgets.QLabel("00:00")
-        self.timer_value_label.setObjectName("timer_value")
-        timer_box_layout.addWidget(self.timer_value_label)
+        white_row = QtWidgets.QHBoxLayout()
+        white_row.setSpacing(8)
+        white_name = QtWidgets.QLabel("White")
+        white_name.setObjectName("timer_side")
+        self.white_timer_value_label = QtWidgets.QLabel("00:00")
+        self.white_timer_value_label.setObjectName("timer_value_white")
+        white_row.addWidget(white_name)
+        white_row.addStretch(1)
+        white_row.addWidget(self.white_timer_value_label)
+        timer_box_layout.addLayout(white_row)
+
+        black_row = QtWidgets.QHBoxLayout()
+        black_row.setSpacing(8)
+        black_name = QtWidgets.QLabel("Black")
+        black_name.setObjectName("timer_side")
+        self.black_timer_value_label = QtWidgets.QLabel("00:00")
+        self.black_timer_value_label.setObjectName("timer_value_black")
+        black_row.addWidget(black_name)
+        black_row.addStretch(1)
+        black_row.addWidget(self.black_timer_value_label)
+        timer_box_layout.addLayout(black_row)
 
         side_panel = QtWidgets.QVBoxLayout()
         side_panel.setSpacing(10)
@@ -487,6 +531,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.status_label = QtWidgets.QLabel("Ready")
         self.status_label.setWordWrap(True)
+        self.status_label.setTextFormat(QtCore.Qt.RichText)
         self.status_label.setObjectName("status")
         side_panel.addWidget(self.status_label)
 
@@ -507,6 +552,10 @@ class MainWindow(QtWidgets.QMainWindow):
         restart_btn = QtWidgets.QPushButton("Restart Game")
         restart_btn.clicked.connect(self.on_restart)
         side_panel.addWidget(restart_btn)
+
+        self.undo_btn = QtWidgets.QPushButton("Undo Move")
+        self.undo_btn.clicked.connect(self.on_undo_move)
+        side_panel.addWidget(self.undo_btn)
 
         menu_btn = QtWidgets.QPushButton("Back To Menu")
         menu_btn.clicked.connect(self.on_back_to_menu)
@@ -546,7 +595,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 border-radius: 8px;
             }}
             QLabel#timer_label {{ color: {self.theme.text_muted}; font-size: 12px; font-weight: 600; }}
-            QLabel#timer_value {{ color: {self.theme.text_primary}; font-size: 16px; font-weight: 700; }}
+            QLabel#timer_side {{ color: {self.theme.text_muted}; font-size: 12px; font-weight: 600; }}
+            QLabel#timer_value_white, QLabel#timer_value_black {{ color: {self.theme.text_primary}; font-size: 16px; font-weight: 700; }}
             QLabel#material_stats {{
                 color: {self.theme.text_primary};
                 background: {self.theme.panel_bg};
@@ -735,7 +785,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if mode == self.GAME_HUMAN_VS_AI:
             self.human_color = chess.WHITE if self.options_side_selector.currentData() == "white" else chess.BLACK
             self.active_ai = self.options_ai_selector.currentData()
-            if self.active_ai == "alphabeta":
+            if self.active_ai in ("alphabeta", "minimax"):
                 self.human_ai_depth = self.options_depth_selector.value()
                 self.settings.default_depth = self.human_ai_depth
             else:
@@ -748,14 +798,14 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             self.white_ai = self.options_white_ai_selector.currentData()
             self.black_ai = self.options_black_ai_selector.currentData()
-            if self.white_ai == "alphabeta":
+            if self.white_ai in ("alphabeta", "minimax"):
                 self.white_ai_depth = self.options_white_depth_selector.value()
             else:
                 self.white_mcts_simulations = self.options_white_mcts_sim_selector.value()
                 self.white_mcts_rollout_depth = self.options_white_mcts_rollout_selector.value()
                 self.white_mcts_use_heuristic = bool(self.options_white_mcts_mode_selector.currentData())
 
-            if self.black_ai == "alphabeta":
+            if self.black_ai in ("alphabeta", "minimax"):
                 self.black_ai_depth = self.options_black_depth_selector.value()
             else:
                 self.black_mcts_simulations = self.options_black_mcts_sim_selector.value()
@@ -765,10 +815,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self._start_game_session()
 
     def _start_game_session(self) -> None:
+        self._reset_ai_worker()
         self.ai_timer.stop()
         self._reset_game_timer()
         self.game_clock_timer.start()
         self.board.reset()
+        self._set_active_clock(self.board.turn)
         flip_for_black_human = self.game_mode == self.GAME_HUMAN_VS_AI and self.human_color == chess.BLACK
         self.board_widget.set_flipped(flip_for_black_human)
         self.board_widget.set_board(self.board)
@@ -779,12 +831,13 @@ class MainWindow(QtWidgets.QMainWindow):
             if self.active_ai == "alphabeta":
                 model_name = "Alpha-Beta"
                 options_text = f"d={self.human_ai_depth}"
+            elif self.active_ai == "minimax":
+                model_name = "Minimax Pure"
+                options_text = f"d={self.human_ai_depth}"
             else:
                 mode_tag = "heur" if self.human_mcts_use_heuristic else "pure"
-                model_name = "Monte Carlo"
-                options_text = (
-                    f"sims={self.human_mcts_simulations}, rd={self.human_mcts_rollout_depth}, {mode_tag}"
-                )
+                model_name = f"Monte Carlo ({mode_tag})"
+                options_text = f"sims={self.human_mcts_simulations}, rd={self.human_mcts_rollout_depth}"
             self.game_title_label.setText(
                 f"<span style='font-size:20px; font-weight:700; color:{self.theme.text_primary};'>Human vs AI</span><br/>"
                 f"<span style='font-size:14px; color:{self.theme.accent};'>You: {side_name}</span><br/>"
@@ -793,26 +846,29 @@ class MainWindow(QtWidgets.QMainWindow):
                 f"<span style='font-size:13px; color:{self.theme.text_muted};'>&nbsp;&nbsp;&nbsp;&nbsp;- Options: {options_text}</span>"
             )
             self.toggle_ai_btn.hide()
+            self.undo_btn.show()
         else:
             if self.white_ai == "alphabeta":
                 white_model = "Alpha-Beta"
                 white_options = f"d={self.white_ai_depth}"
+            elif self.white_ai == "minimax":
+                white_model = "Minimax Pure"
+                white_options = f"d={self.white_ai_depth}"
             else:
                 white_mode = "heur" if self.white_mcts_use_heuristic else "pure"
-                white_model = "Monte Carlo"
-                white_options = (
-                    f"sims={self.white_mcts_simulations}, rd={self.white_mcts_rollout_depth}, {white_mode}"
-                )
+                white_model = f"Monte Carlo ({white_mode})"
+                white_options = f"sims={self.white_mcts_simulations}, rd={self.white_mcts_rollout_depth}"
 
             if self.black_ai == "alphabeta":
                 black_model = "Alpha-Beta"
                 black_options = f"d={self.black_ai_depth}"
+            elif self.black_ai == "minimax":
+                black_model = "Minimax Pure"
+                black_options = f"d={self.black_ai_depth}"
             else:
                 black_mode = "heur" if self.black_mcts_use_heuristic else "pure"
-                black_model = "Monte Carlo"
-                black_options = (
-                    f"sims={self.black_mcts_simulations}, rd={self.black_mcts_rollout_depth}, {black_mode}"
-                )
+                black_model = f"Monte Carlo ({black_mode})"
+                black_options = f"sims={self.black_mcts_simulations}, rd={self.black_mcts_rollout_depth}"
 
             self.game_title_label.setText(
                 f"<span style='font-size:20px; font-weight:700; color:{self.theme.text_primary};'>AI vs AI</span><br/>"
@@ -826,6 +882,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.toggle_ai_btn.show()
             self.toggle_ai_btn.setText("Stop AI vs AI")
             self.ai_timer.start()
+            self.undo_btn.hide()
 
         self.stacked.setCurrentWidget(self.game_page)
         self._refresh_status()
@@ -833,11 +890,21 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _clear_move_history(self) -> None:
         self.move_history_lines = []
+        self.white_captured_order = []
+        self.black_captured_order = []
         self.history_box.setPlainText("")
 
     def _record_move(self, move: chess.Move) -> None:
         board = self.board.to_python_chess()
+        captured_code = self._captured_piece_code_for_move(board, move)
+        mover_color = board.turn
         san = board.san(move)
+
+        if captured_code is not None:
+            if mover_color == chess.WHITE:
+                self.white_captured_order.append(captured_code)
+            else:
+                self.black_captured_order.append(captured_code)
 
         if board.turn == chess.WHITE:
             self.move_history_lines.append(f"{board.fullmove_number}. {san}")
@@ -850,6 +917,25 @@ class MainWindow(QtWidgets.QMainWindow):
         self.history_box.setPlainText("\n".join(self.move_history_lines))
         self.history_box.verticalScrollBar().setValue(self.history_box.verticalScrollBar().maximum())
 
+    def _captured_piece_code_for_move(self, board: chess.Board, move: chess.Move) -> Optional[str]:
+        if not board.is_capture(move):
+            return None
+
+        capture_square = move.to_square
+        if board.is_en_passant(move):
+            capture_square = move.to_square - 8 if board.turn == chess.WHITE else move.to_square + 8
+
+        captured_piece = board.piece_at(capture_square)
+        if captured_piece is None:
+            return None
+
+        code = self.PIECE_CODES.get(captured_piece.piece_type)
+        if code is None:
+            return None
+
+        prefix = "w" if captured_piece.color == chess.WHITE else "b"
+        return f"{prefix}{code}"
+
     def _can_human_move(self) -> bool:
         return self.game_mode == self.GAME_HUMAN_VS_AI and not self.board.is_game_over() and self.board.turn == self.human_color
 
@@ -859,33 +945,39 @@ class MainWindow(QtWidgets.QMainWindow):
         return self.white_ai if self.board.turn == chess.WHITE else self.black_ai
 
     def _pick_ai_move(self):
+        return self._pick_ai_move_for_board(self.board)
+
+    def _pick_ai_move_for_board(self, board: Board):
         if self.game_mode == self.GAME_HUMAN_VS_AI:
-            if self.active_ai == "alphabeta":
-                return self._pick_engine_move(self.active_ai, depth=self.human_ai_depth)
+            if self.active_ai in ("alphabeta", "minimax"):
+                return self._pick_engine_move(self.active_ai, depth=self.human_ai_depth, board=board)
             return self._pick_engine_move(
                 self.active_ai,
                 simulations=self.human_mcts_simulations,
                 rollout_depth=self.human_mcts_rollout_depth,
                 use_heuristic_eval=self.human_mcts_use_heuristic,
+                board=board,
             )
 
-        if self.board.turn == chess.WHITE:
-            if self.white_ai == "alphabeta":
-                return self._pick_engine_move(self.white_ai, depth=self.white_ai_depth)
+        if board.turn == chess.WHITE:
+            if self.white_ai in ("alphabeta", "minimax"):
+                return self._pick_engine_move(self.white_ai, depth=self.white_ai_depth, board=board)
             return self._pick_engine_move(
                 self.white_ai,
                 simulations=self.white_mcts_simulations,
                 rollout_depth=self.white_mcts_rollout_depth,
                 use_heuristic_eval=self.white_mcts_use_heuristic,
+                board=board,
             )
 
-        if self.black_ai == "alphabeta":
-            return self._pick_engine_move(self.black_ai, depth=self.black_ai_depth)
+        if self.black_ai in ("alphabeta", "minimax"):
+            return self._pick_engine_move(self.black_ai, depth=self.black_ai_depth, board=board)
         return self._pick_engine_move(
             self.black_ai,
             simulations=self.black_mcts_simulations,
             rollout_depth=self.black_mcts_rollout_depth,
             use_heuristic_eval=self.black_mcts_use_heuristic,
+            board=board,
         )
 
     def _pick_engine_move(
@@ -895,18 +987,32 @@ class MainWindow(QtWidgets.QMainWindow):
         simulations: int = 500,
         rollout_depth: int = 3,
         use_heuristic_eval: bool = True,
+        board: Optional[Board] = None,
     ):
+        active_board = board if board is not None else self.board
         if engine_name == "alphabeta":
-            return AlphaBetaAI(depth=max(1, depth)).choose_move(self.board)
+            return AlphaBetaAI(
+                depth=max(1, depth),
+                num_processes=max(1, self.settings.default_alphabeta_processes),
+            ).choose_move(active_board)
+        if engine_name == "minimax":
+            return MinimaxAI(
+                depth=max(1, depth),
+                num_processes=max(1, self.settings.default_minimax_processes),
+            ).choose_move(active_board)
         return MCTS(
             simulations=max(1, simulations),
             rollout_depth=max(1, rollout_depth),
             use_heuristic_eval=use_heuristic_eval,
-        ).choose_move(self.board)
+            num_threads=max(1, self.settings.default_mcts_processes),
+            rollout_eval_mix_alpha=self.settings.default_mcts_rollout_eval_mix_alpha,
+            use_biased_rollout=self.settings.default_mcts_use_biased_rollout,
+            rollout_mix_extra_depth=max(1, self.settings.default_mcts_rollout_mix_extra_depth),
+        ).choose_move(active_board)
 
     def _refresh_status(self) -> None:
         if self.board.is_game_over():
-            self.game_clock_timer.stop()
+            self._stop_timers_for_game_end()
 
         if self.board.is_checkmate():
             winner = "Black" if self.board.turn == chess.WHITE else "White"
@@ -914,13 +1020,35 @@ class MainWindow(QtWidgets.QMainWindow):
             self._update_material_stats()
             return
         if self.board.is_stalemate():
-            self.status_label.setText("Stalemate.")
+            self._set_draw_status("stalemate")
+            self._update_material_stats()
+            return
+        if self.board.is_game_over() and self.board.result() == "1/2-1/2":
+            self._set_draw_status(self._draw_reason_short())
             self._update_material_stats()
             return
         side = "White" if self.board.turn == chess.WHITE else "Black"
         check = " (check)" if self.board.is_check() else ""
         self.status_label.setText(f"Turn: {side}{check}")
         self._update_material_stats()
+
+    def _draw_reason_short(self) -> str:
+        py_board = self.board.to_python_chess()
+        if py_board.is_stalemate():
+            return "stalemate"
+        if py_board.is_insufficient_material():
+            return "insufficient material"
+        if py_board.is_seventyfive_moves():
+            return "75-move rule"
+        if py_board.is_fivefold_repetition():
+            return "fivefold repetition"
+        return "draw by rule"
+
+    def _set_draw_status(self, reason: str) -> None:
+        self.status_label.setText(
+            "<span style='color:#FFD34D; font-size:14px; font-weight:600;'>Draw.</span><br/>"
+            f"<span style='color:#FFD34D; font-size:11px;'>Reason: {reason}</span>"
+        )
 
     def _captured_piece_codes(self, captured_color: chess.Color) -> List[str]:
         board = self.board.to_python_chess()
@@ -936,6 +1064,13 @@ class MainWindow(QtWidgets.QMainWindow):
     def _captured_points(self, captured_codes: List[str]) -> int:
         symbol_values = {"p": 1, "n": 3, "b": 3, "r": 5, "q": 9}
         return sum(symbol_values.get(code[1], 0) for code in captured_codes)
+
+    def _material_points(self, color: chess.Color) -> int:
+        py_board = self.board.to_python_chess()
+        total = 0
+        for piece_type, value in self.PIECE_VALUES.items():
+            total += value * len(py_board.pieces(piece_type, color))
+        return total
 
     def _piece_icon_html(self, piece_code: str, icon_px: int) -> str:
         image_path = self.piece_img_dir / f"{piece_code}.png"
@@ -953,15 +1088,14 @@ class MainWindow(QtWidgets.QMainWindow):
         return " ".join(self._piece_icon_html(code, icon_px) for code in captured_codes)
 
     def _update_material_stats(self) -> None:
-        white_captured = self._captured_piece_codes(chess.BLACK)
-        black_captured = self._captured_piece_codes(chess.WHITE)
+        white_captured = self.white_captured_order
+        black_captured = self.black_captured_order
 
-        white_points = self._captured_points(white_captured)
-        black_points = self._captured_points(black_captured)
-        diff = white_points - black_points
+        # Use live board material so promotions are reflected in advantage values.
+        material_diff = self._material_points(chess.WHITE) - self._material_points(chess.BLACK)
 
-        white_adv = max(0, diff)
-        black_adv = max(0, -diff)
+        white_adv = max(0, material_diff)
+        black_adv = max(0, -material_diff)
 
         icon_px = max(14, self.material_stats_label.fontMetrics().height())
         white_list = self._captured_icons_html(white_captured, icon_px)
@@ -974,13 +1108,14 @@ class MainWindow(QtWidgets.QMainWindow):
     def _kick_ai_if_needed(self) -> None:
         if self.board.is_game_over():
             self.ai_timer.stop()
+            self.ai_result_timer.stop()
             if self.game_mode == self.GAME_AI_VS_AI:
                 self.toggle_ai_btn.setText("Start AI vs AI")
             self._refresh_status()
             return
 
         if self.game_mode == self.GAME_HUMAN_VS_AI and self.board.turn != self.human_color:
-            QtCore.QTimer.singleShot(self.settings.ai_turn_interval_ms, self._play_single_ai_move)
+            QtCore.QTimer.singleShot(self.settings.ai_turn_interval_ms, self._request_ai_move_if_needed)
 
     def _play_single_ai_move(self) -> None:
         if self.board.is_game_over():
@@ -994,6 +1129,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         self._record_move(move)
         self.board.push_move(move)
+        self._on_turn_changed()
         self.board_widget.update_board()
         self._refresh_status()
 
@@ -1004,13 +1140,66 @@ class MainWindow(QtWidgets.QMainWindow):
             self._refresh_status()
             return
 
-        move = self._pick_ai_move()
+        self._request_ai_move_if_needed()
+
+    def _request_ai_move_if_needed(self) -> None:
+        if self.board.is_game_over():
+            return
+        if self.ai_future is not None:
+            return
+
+        is_ai_turn = False
+        if self.game_mode == self.GAME_HUMAN_VS_AI:
+            is_ai_turn = self.board.turn != self.human_color
+        elif self.game_mode == self.GAME_AI_VS_AI:
+            is_ai_turn = True
+
+        if not is_ai_turn:
+            return
+
+        board_snapshot = self.board.copy()
+        self.ai_task_fen = board_snapshot.to_python_chess().fen()
+        self.ai_task_mode = self.game_mode
+        self.ai_future = self.ai_executor.submit(self._pick_ai_move_for_board, board_snapshot)
+        if not self.ai_result_timer.isActive():
+            self.ai_result_timer.start()
+
+    def _on_ai_result_tick(self) -> None:
+        if self.ai_future is None:
+            self.ai_result_timer.stop()
+            return
+        if not self.ai_future.done():
+            return
+
+        future = self.ai_future
+        self.ai_future = None
+
+        try:
+            move = future.result()
+        except Exception as exc:
+            self.status_label.setText(f"AI error: {exc}")
+            self.ai_result_timer.stop()
+            return
+
+        if self.board.is_game_over():
+            self._stop_timers_for_game_end()
+            return
+        if self.ai_task_mode != self.game_mode:
+            return
+        if self.ai_task_fen != self.board.to_python_chess().fen():
+            return
+
         if self._handle_ai_promotion_choice(move):
             return
+
         self._record_move(move)
         self.board.push_move(move)
+        self._on_turn_changed()
         self.board_widget.update_board()
         self._refresh_status()
+
+        if self.game_mode == self.GAME_HUMAN_VS_AI:
+            self._kick_ai_if_needed()
 
     def _handle_ai_promotion_choice(self, move: chess.Move) -> bool:
         board = self.board.to_python_chess()
@@ -1022,43 +1211,16 @@ class MainWindow(QtWidgets.QMainWindow):
         if to_rank not in (0, 7):
             return False
 
-        from_file = chess.square_file(move.from_square)
-        from_rank = chess.square_rank(move.from_square)
-        to_file = chess.square_file(move.to_square)
-        to_rank = chess.square_rank(move.to_square)
+        # AI promotions are always auto-queen to avoid blocking game flow with a picker dialog.
+        promoted_move = chess.Move(move.from_square, move.to_square, promotion=chess.QUEEN)
+        self._record_move(promoted_move)
+        self.board.push_move(promoted_move)
+        self._on_turn_changed()
+        self.board_widget.update_board()
+        self._refresh_status()
 
-        if self.game_mode == self.GAME_AI_VS_AI:
-            self.ai_timer.stop()
-
-        def apply_selected_promotion(choice: str) -> None:
-            promotion_map = {
-                "q": chess.QUEEN,
-                "r": chess.ROOK,
-                "b": chess.BISHOP,
-                "n": chess.KNIGHT,
-            }
-            promoted_move = chess.Move(
-                move.from_square,
-                move.to_square,
-                promotion=promotion_map.get(choice.lower(), chess.QUEEN),
-            )
-            self._record_move(promoted_move)
-            self.board.push_move(promoted_move)
-            self.board_widget.update_board()
-            self._refresh_status()
-
-            if self.game_mode == self.GAME_AI_VS_AI and not self.board.is_game_over():
-                self.ai_timer.start()
-            elif self.game_mode == self.GAME_HUMAN_VS_AI:
-                self._kick_ai_if_needed()
-
-        self.board_widget.begin_promotion_selection(
-            src=(from_file, from_rank),
-            dst=(to_file, to_rank),
-            piece_color=piece.color,
-            options=["q", "r", "b", "n"],
-            on_selected=apply_selected_promotion,
-        )
+        if self.game_mode == self.GAME_HUMAN_VS_AI:
+            self._kick_ai_if_needed()
         return True
 
     def on_toggle_ai_vs_ai(self) -> None:
@@ -1076,23 +1238,150 @@ class MainWindow(QtWidgets.QMainWindow):
     def on_restart(self) -> None:
         self._start_game_session()
 
+    def on_undo_move(self) -> None:
+        if self.game_mode != self.GAME_HUMAN_VS_AI:
+            return
+
+        self._reset_ai_worker()
+        self.ai_timer.stop()
+
+        py_board = self.board.to_python_chess()
+        if not py_board.move_stack:
+            return
+
+        # If it's human turn, AI already replied -> rollback one full turn (2 plies).
+        plies_to_undo = 2 if self.board.turn == self.human_color and len(py_board.move_stack) >= 2 else 1
+        for _ in range(plies_to_undo):
+            if not py_board.move_stack:
+                break
+            self.board.pop()
+
+        self._rebuild_move_history_from_board()
+        self._set_active_clock(self.board.turn)
+        self.board_widget.update_board()
+        self._refresh_status()
+        self._kick_ai_if_needed()
+
+    def _rebuild_move_history_from_board(self) -> None:
+        py_board = self.board.to_python_chess()
+        moves = list(py_board.move_stack)
+
+        self.move_history_lines = []
+        self.white_captured_order = []
+        self.black_captured_order = []
+
+        replay = chess.Board()
+        for move in moves:
+            captured_code = self._captured_piece_code_for_move(replay, move)
+            mover_color = replay.turn
+            san = replay.san(move)
+
+            if captured_code is not None:
+                if mover_color == chess.WHITE:
+                    self.white_captured_order.append(captured_code)
+                else:
+                    self.black_captured_order.append(captured_code)
+
+            if replay.turn == chess.WHITE:
+                self.move_history_lines.append(f"{replay.fullmove_number}. {san}")
+            else:
+                if not self.move_history_lines:
+                    self.move_history_lines.append(f"{replay.fullmove_number}... {san}")
+                else:
+                    self.move_history_lines[-1] = self.move_history_lines[-1] + f" {san}"
+
+            replay.push(move)
+
+        self.history_box.setPlainText("\n".join(self.move_history_lines))
+        self.history_box.verticalScrollBar().setValue(self.history_box.verticalScrollBar().maximum())
+
     def on_back_to_menu(self) -> None:
+        self._reset_ai_worker()
         self.ai_timer.stop()
         self.game_clock_timer.stop()
+        self._stop_active_clock()
         self.setup_layers.setCurrentWidget(self.mode_layer)
         self.stacked.setCurrentWidget(self.menu_page)
 
-    def _format_elapsed(self, total_seconds: int) -> str:
-        minutes, seconds = divmod(total_seconds, 60)
+    def _reset_ai_worker(self) -> None:
+        self.ai_result_timer.stop()
+        if self.ai_future is not None and not self.ai_future.done():
+            self.ai_future.cancel()
+        self.ai_future = None
+        self.ai_task_fen = None
+        self.ai_task_mode = None
+        self.ai_executor.shutdown(wait=False, cancel_futures=True)
+        self.ai_executor = ThreadPoolExecutor(max_workers=1)
+
+    def closeEvent(self, event) -> None:
+        self.ai_timer.stop()
+        self.game_clock_timer.stop()
+        self.ai_result_timer.stop()
+        self.ai_executor.shutdown(wait=False, cancel_futures=True)
+        super().closeEvent(event)
+
+    def _format_elapsed(self, total_seconds: float) -> str:
+        minutes, seconds = divmod(int(total_seconds), 60)
         return f"{minutes:02d}:{seconds:02d}"
 
     def _reset_game_timer(self) -> None:
-        self.game_elapsed_seconds = 0
-        self.timer_value_label.setText(self._format_elapsed(self.game_elapsed_seconds))
+        self.white_elapsed_seconds = 0.0
+        self.black_elapsed_seconds = 0.0
+        self.active_clock_color = None
+        self.clock_last_update_ts = 0.0
+        self._update_clock_labels()
+
+    def _set_active_clock(self, color: chess.Color) -> None:
+        self._sync_active_clock()
+        self.active_clock_color = color
+        self.clock_last_update_ts = time.monotonic()
+        self._update_clock_labels()
+
+    def _stop_active_clock(self) -> None:
+        self._sync_active_clock()
+        self.active_clock_color = None
+        self.clock_last_update_ts = 0.0
+
+    def _stop_timers_for_game_end(self) -> None:
+        """Stop all running timers when a game result is reached."""
+        self._stop_active_clock()
+        self.game_clock_timer.stop()
+        self.ai_timer.stop()
+        self.ai_result_timer.stop()
+        if self.game_mode == self.GAME_AI_VS_AI:
+            self.toggle_ai_btn.setText("Start AI vs AI")
+        self._update_clock_labels()
+
+    def _sync_active_clock(self) -> None:
+        if self.active_clock_color is None or self.clock_last_update_ts <= 0.0:
+            return
+        now = time.monotonic()
+        delta = max(0.0, now - self.clock_last_update_ts)
+        if self.active_clock_color == chess.WHITE:
+            self.white_elapsed_seconds += delta
+        else:
+            self.black_elapsed_seconds += delta
+        self.clock_last_update_ts = now
+
+    def _update_clock_labels(self) -> None:
+        self.white_timer_value_label.setText(self._format_elapsed(self.white_elapsed_seconds))
+        self.black_timer_value_label.setText(self._format_elapsed(self.black_elapsed_seconds))
+
+        white_active = self.active_clock_color == chess.WHITE
+        black_active = self.active_clock_color == chess.BLACK
+        self.white_timer_value_label.setStyleSheet("color: #FFE08A;" if white_active else "")
+        self.black_timer_value_label.setStyleSheet("color: #FFE08A;" if black_active else "")
+
+    def _on_turn_changed(self) -> None:
+        if self.board.is_game_over():
+            self._stop_timers_for_game_end()
+        else:
+            self._set_active_clock(self.board.turn)
+        self._update_clock_labels()
 
     def _on_game_clock_tick(self) -> None:
-        self.game_elapsed_seconds += 1
-        self.timer_value_label.setText(self._format_elapsed(self.game_elapsed_seconds))
+        self._sync_active_clock()
+        self._update_clock_labels()
 
     def on_human_move(self, move_uci: str) -> None:
         """Apply human move then trigger AI reply."""
@@ -1102,6 +1391,7 @@ class MainWindow(QtWidgets.QMainWindow):
         move = chess.Move.from_uci(move_uci)
         self._record_move(move)
         self.board.push_uci(move_uci)
+        self._on_turn_changed()
         self.board_widget.update_board()
         self._refresh_status()
         self._kick_ai_if_needed()
