@@ -127,17 +127,21 @@ def format_float(v: float) -> str:
     return f"{v:.2f}"
 
 
-def make_bot(spec: EngineSpec):
+def make_bot(spec: EngineSpec, alphabeta_processes: int, minimax_processes: int, mcts_threads: int):
     if spec.kind == "alphabeta":
-        return AlphaBetaAI(depth=max(1, int(spec.depth or 3)), num_processes=1, use_opening_book=(spec.opening == "on"))
+        return AlphaBetaAI(
+            depth=max(1, int(spec.depth or 3)),
+            num_processes=max(1, int(alphabeta_processes)),
+            use_opening_book=(spec.opening == "on"),
+        )
     if spec.kind == "minimax":
-        return MinimaxAI(depth=max(1, int(spec.depth or 3)), num_processes=1)
+        return MinimaxAI(depth=max(1, int(spec.depth or 3)), num_processes=max(1, int(minimax_processes)))
     if spec.kind == "mcts":
         return StandardMCTS(
             simulations=max(1, int(spec.simulations or 500)),
             rollout_depth=max(1, int(spec.rollout_depth)),
             use_heuristic_eval=False,
-            num_threads=1,
+            num_threads=max(1, int(mcts_threads)),
             use_opening_book=(spec.opening == "on"),
         )
     if spec.kind == "mcts_heuristic":
@@ -145,7 +149,7 @@ def make_bot(spec: EngineSpec):
             simulations=max(1, int(spec.simulations or 500)),
             rollout_depth=max(1, int(spec.rollout_depth)),
             use_heuristic_eval=True,
-            num_threads=1,
+            num_threads=max(1, int(mcts_threads)),
             use_opening_book=(spec.opening == "on"),
         )
     if spec.kind in {"random", "stockfish"}:
@@ -271,12 +275,25 @@ def run_scenario(
     move_time_ms: int,
     max_plies: int,
     seed: int,
+    alphabeta_processes: int,
+    minimax_processes: int,
+    mcts_threads: int,
 ) -> int:
     random.seed(seed)
     rows: List[Dict[str, str]] = []
 
-    bot_a = make_bot(scenario.a)
-    bot_b = make_bot(scenario.b)
+    bot_a = make_bot(
+        scenario.a,
+        alphabeta_processes=alphabeta_processes,
+        minimax_processes=minimax_processes,
+        mcts_threads=mcts_threads,
+    )
+    bot_b = make_bot(
+        scenario.b,
+        alphabeta_processes=alphabeta_processes,
+        minimax_processes=minimax_processes,
+        mcts_threads=mcts_threads,
+    )
 
     for game_idx in range(1, scenario.games + 1):
         # Split colors 50/50.
@@ -392,6 +409,9 @@ def main() -> None:
     parser.add_argument("--move-time-ms", type=int, default=100, help="Stockfish move time in milliseconds")
     parser.add_argument("--max-plies", type=int, default=240, help="Max plies before draw")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument("--alphabeta-processes", type=int, default=6, help="Worker processes for AlphaBeta")
+    parser.add_argument("--minimax-processes", type=int, default=6, help="Worker processes for Minimax")
+    parser.add_argument("--mcts-threads", type=int, default=6, help="Worker threads for MCTS variants")
     args = parser.parse_args()
 
     out_dir = (PROJECT_ROOT / args.out_dir).resolve()
@@ -427,6 +447,12 @@ def main() -> None:
         )
 
     print(f"Using Stockfish: {stockfish_path}")
+    print(
+        "Engine parallelism: "
+        f"alphabeta_processes={max(1, args.alphabeta_processes)}, "
+        f"minimax_processes={max(1, args.minimax_processes)}, "
+        f"mcts_threads={max(1, args.mcts_threads)}"
+    )
 
     scenarios = build_all_scenarios()
     assigned = assign_scenarios(args.machine_id, scenarios)
@@ -444,6 +470,9 @@ def main() -> None:
             move_time_ms=max(1, args.move_time_ms),
             max_plies=max(20, args.max_plies),
             seed=args.seed + idx,
+            alphabeta_processes=max(1, args.alphabeta_processes),
+            minimax_processes=max(1, args.minimax_processes),
+            mcts_threads=max(1, args.mcts_threads),
         )
         completed += n
         print(f"  -> wrote {n} rows | cumulative={completed}")

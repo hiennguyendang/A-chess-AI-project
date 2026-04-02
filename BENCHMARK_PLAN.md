@@ -214,23 +214,30 @@ Lệnh mẫu:
 
 Máy Hiên:
 ```bash
-python benchmark/run_distributed_benchmark.py --machine-id hien --out-dir benchmark_results
+python benchmark/run_distributed_benchmark.py --machine-id hien --out-dir benchmark_results --alphabeta-processes 6 --minimax-processes 6 --mcts-threads 6
 ```
 
 Máy Huy:
 ```bash
-python benchmark/run_distributed_benchmark.py --machine-id huy --out-dir benchmark_results
+python benchmark/run_distributed_benchmark.py --machine-id huy --out-dir benchmark_results --alphabeta-processes 6 --minimax-processes 6 --mcts-threads 6
 ```
 
 Máy Nam:
 ```bash
-python benchmark/run_distributed_benchmark.py --machine-id nam --out-dir benchmark_results
+python benchmark/run_distributed_benchmark.py --machine-id nam --out-dir benchmark_results --alphabeta-processes 6 --minimax-processes 6 --mcts-threads 6
 ```
 
 Tham số bổ sung (tuỳ chọn):
 - `--move-time-ms 100`
 - `--max-plies 240`
 - `--seed 42`
+- `--alphabeta-processes 6`
+- `--minimax-processes 6`
+- `--mcts-threads 6`
+
+Lưu ý công bằng khi đo tốc độ:
+- Nếu so sánh tốc độ giữa các thuật toán, giữ cố định các cờ song song ở mọi máy và mọi lần chạy.
+- Không chạy nhiều benchmark cùng lúc trên cùng 1 máy khi đang đo thời gian, vì sẽ làm nhiễu chỉ số time.
 
 ### 6.5 Ghép kết quả tự động
 
