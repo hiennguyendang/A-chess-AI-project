@@ -16,4 +16,8 @@ class Settings:
     default_mcts_use_biased_rollout: bool = True
     default_mcts_rollout_mix_extra_depth: int = 6
     ai_turn_interval_ms: int = 180
+    # Backward-compatible global switch (applies to both models when True).
     use_opening_book: bool = False
+    # Per-model switches requested for quick castling opening guidance.
+    use_opening_book_alphabeta: bool = True
+    use_opening_book_mcts: bool = True

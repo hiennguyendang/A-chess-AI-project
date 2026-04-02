@@ -122,6 +122,48 @@ def parse_value(raw: str) -> Any:
 	return value
 
 
+def elo_to_skill_level(elo: int) -> int:
+	bounded = max(100, min(3200, int(elo)))
+	return max(0, min(20, int(round((bounded - 100) * 20 / 3100))))
+
+
+def configure_uci_strength(engine: chess.engine.SimpleEngine, requested_elo: int) -> int:
+	options = engine.options
+	has_limit = "UCI_LimitStrength" in options
+	has_elo = "UCI_Elo" in options
+	has_skill = "Skill Level" in options
+
+	if has_elo:
+		elo_option = options["UCI_Elo"]
+		min_elo = getattr(elo_option, "min", None)
+		max_elo = getattr(elo_option, "max", None)
+		applied = int(requested_elo)
+		if isinstance(min_elo, int):
+			applied = max(applied, min_elo)
+		if isinstance(max_elo, int):
+			applied = min(applied, max_elo)
+
+		cfg: Dict[str, Any] = {"UCI_Elo": applied}
+		if has_limit:
+			cfg["UCI_LimitStrength"] = True
+		if has_skill and applied != int(requested_elo):
+			cfg["Skill Level"] = elo_to_skill_level(int(requested_elo))
+		engine.configure(cfg)
+		return applied
+
+	if has_skill:
+		cfg_skill: Dict[str, Any] = {"Skill Level": elo_to_skill_level(int(requested_elo))}
+		if has_limit:
+			cfg_skill["UCI_LimitStrength"] = False
+		engine.configure(cfg_skill)
+		return int(requested_elo)
+
+	if has_limit:
+		engine.configure({"UCI_LimitStrength": False})
+
+	raise chess.engine.EngineError("Engine does not expose UCI_Elo or Skill Level options")
+
+
 def parse_key_value(raw: str) -> tuple[str, Any]:
 	if "=" not in raw:
 		raise argparse.ArgumentTypeError("Bot parameter must use key=value format")
@@ -526,6 +568,11 @@ class BenchmarkWorker(QtCore.QObject):
 				self.log.emit(f"=== Opponent {opp_index}/{len(self.opponents)}: {opponent.name} | Elo={opponent.elo} | Games={opponent_games} ===")
 				opp_stats = MatchStats()
 				with chess.engine.SimpleEngine.popen_uci(str(opponent.path)) as uci_engine:
+					try:
+						applied_elo = configure_uci_strength(uci_engine, int(round(opponent.elo)))
+						self.log.emit(f"Configured opponent strength: requested Elo={int(round(opponent.elo))}, applied={applied_elo}")
+					except chess.engine.EngineError as exc:
+						self.log.emit(f"Warning: could not apply opponent Elo ({exc}); engine may play at default strength.")
 					for game_idx, project_is_white in enumerate(iter_color_assignment(opponent_games), start=1):
 						current_game_no = completed + 1
 						outcome = run_single_game(
@@ -622,7 +669,11 @@ def build_project_bot(bot_name: str, params: Dict[str, Any]):
 	if bot_name == "minimax":
 		return MinimaxAI(depth=max(1, int(params.get("depth", 3))), num_processes=max(1, int(params.get("threads", 1))))
 	if bot_name == "alphabeta":
-		return AlphaBetaAI(depth=max(1, int(params.get("depth", 3))), num_processes=max(1, int(params.get("threads", 1))))
+		return AlphaBetaAI(
+			depth=max(1, int(params.get("depth", 3))),
+			num_processes=max(1, int(params.get("threads", 1))),
+			use_opening_book=bool(params.get("use_opening_book", False)),
+		)
 	if bot_name == "mcts":
 		return StandardMCTS(
 			simulations=max(1, int(params.get("simulations", 300))),
@@ -634,6 +685,7 @@ def build_project_bot(bot_name: str, params: Dict[str, Any]):
 			rollout_eval_mix_alpha=float(params.get("rollout_eval_mix_alpha", 0.35)),
 			use_biased_rollout=bool(params.get("use_biased_rollout", True)),
 			rollout_mix_extra_depth=max(1, int(params.get("rollout_mix_extra_depth", 6))),
+			use_opening_book=bool(params.get("use_opening_book", False)),
 		)
 	if bot_name == "mcts_heuristic":
 		return HeuristicMCTS(
@@ -646,6 +698,7 @@ def build_project_bot(bot_name: str, params: Dict[str, Any]):
 			rollout_eval_mix_alpha=float(params.get("rollout_eval_mix_alpha", 0.35)),
 			use_biased_rollout=bool(params.get("use_biased_rollout", True)),
 			rollout_mix_extra_depth=max(1, int(params.get("rollout_mix_extra_depth", 6))),
+			use_opening_book=bool(params.get("use_opening_book", False)),
 		)
 	raise ValueError(f"Unsupported bot: {bot_name}")
 

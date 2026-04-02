@@ -337,6 +337,7 @@ class MCTSBatchWindow(BaseBatchWindow):
             rollout_eval_mix_alpha=self.settings.default_mcts_rollout_eval_mix_alpha,
             use_biased_rollout=self.settings.default_mcts_use_biased_rollout,
             rollout_mix_extra_depth=max(1, self.settings.default_mcts_rollout_mix_extra_depth),
+            use_opening_book=self.settings.use_opening_book or self.settings.use_opening_book_mcts,
         )
 
 
@@ -359,4 +360,5 @@ class MCTSHeuristicBatchWindow(BaseBatchWindow):
             rollout_eval_mix_alpha=self.settings.default_mcts_rollout_eval_mix_alpha,
             use_biased_rollout=self.settings.default_mcts_use_biased_rollout,
             rollout_mix_extra_depth=max(1, self.settings.default_mcts_rollout_mix_extra_depth),
+            use_opening_book=self.settings.use_opening_book or self.settings.use_opening_book_mcts,
         )

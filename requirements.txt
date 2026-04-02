@@ -1,3 +1,6 @@
 python-chess>=1.10.0
 PyQt5>=5.15.10
 numpy>=1.26.0
+
+# Run: winget install Stockfish.Stockfish
+# This allow you to use the Stockfish engine

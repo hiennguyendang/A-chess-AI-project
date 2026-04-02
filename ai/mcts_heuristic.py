@@ -9,6 +9,7 @@ from typing import List, Optional
 import chess
 
 from ai import mcts_evaluator
+from ai.opening_book import choose_italian_castling_move
 from ai import search_parallel as parallel
 from ai.utils import ucb1
 from engine.board import Board
@@ -139,6 +140,7 @@ class MCTS:
         rollout_eval_mix_alpha: float = 0.35,
         use_biased_rollout: bool = True,
         rollout_mix_extra_depth: int = 6,
+        use_opening_book: bool = False,
     ) -> None:
         self.simulations = simulations
         self.rollout_depth = max(1, rollout_depth)
@@ -149,10 +151,15 @@ class MCTS:
         self.rollout_eval_mix_alpha = min(1.0, max(0.0, rollout_eval_mix_alpha))
         self.use_biased_rollout = use_biased_rollout
         self.rollout_mix_extra_depth = max(1, rollout_mix_extra_depth)
+        self.use_opening_book = use_opening_book
 
     def choose_move(self, board: Board) -> chess.Move:
-        print("[MCTSHeuristic] choose_move called", flush=True)
         legal_moves = board.legal_chess_moves()
+
+        if self.use_opening_book:
+            opening_move = choose_italian_castling_move(board, legal_moves)
+            if opening_move is not None:
+                return opening_move
 
         if parallel.should_parallelize(self.simulations, self.num_threads, len(legal_moves)):
             return self._choose_move_parallel(board)

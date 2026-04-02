@@ -4,10 +4,13 @@ from __future__ import annotations
 import sys
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
+import os
 from pathlib import Path
+import shutil
 from typing import Dict, List, Optional
 
 import chess
+import chess.engine
 from PyQt5 import QtCore, QtWidgets
 
 from ai.alphabeta import AlphaBetaAI
@@ -74,6 +77,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.alpha_beta = AlphaBetaAI(
             depth=settings.default_depth,
             num_processes=max(1, settings.default_alphabeta_processes),
+            use_opening_book=settings.use_opening_book or settings.use_opening_book_alphabeta,
         )
         self.mcts = MCTS(
             simulations=settings.default_simulations,
@@ -83,6 +87,7 @@ class MainWindow(QtWidgets.QMainWindow):
             rollout_eval_mix_alpha=settings.default_mcts_rollout_eval_mix_alpha,
             use_biased_rollout=settings.default_mcts_use_biased_rollout,
             rollout_mix_extra_depth=max(1, settings.default_mcts_rollout_mix_extra_depth),
+            use_opening_book=settings.use_opening_book or settings.use_opening_book_mcts,
         )
         self.human_color = chess.WHITE
         self.game_mode = self.GAME_HUMAN_VS_AI
@@ -101,6 +106,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.black_mcts_simulations = settings.default_simulations
         self.black_mcts_rollout_depth = settings.default_depth
         self.black_mcts_use_heuristic = settings.default_mcts_use_heuristic
+        self.uci_engine_path = self._find_stockfish_executable()
+        self.human_stockfish_elo = 2400
+        self.white_stockfish_elo = 2400
+        self.black_stockfish_elo = 2400
+        self.uci_move_time_ms = 100
         self.move_history_lines: List[str] = []
         self.white_captured_order: List[str] = []
         self.black_captured_order: List[str] = []
@@ -277,12 +287,27 @@ class MainWindow(QtWidgets.QMainWindow):
         self.options_ai_selector.addItem("Minimax Pure", "minimax")
         self.options_ai_selector.addItem("Monte Carlo", "mcts")
         self.options_ai_selector.addItem("Monte Carlo Heuristic", "mcts_heuristic")
+        self.options_ai_selector.addItem("UCI Engine", "uci")
         self.options_ai_selector.currentIndexChanged.connect(self._update_engine_specific_rows)
         row_ai_layout.addWidget(self.options_ai_selector)
         self.row_ai.setLayout(row_ai_layout)
         self.label_ai = QtWidgets.QLabel("AI Engine")
         form.addRow(self.label_ai, self.row_ai)
         self.option_rows["ai"] = (self.label_ai, self.row_ai)
+
+        self.row_stockfish_elo = QtWidgets.QWidget()
+        row_stockfish_elo_layout = QtWidgets.QHBoxLayout()
+        row_stockfish_elo_layout.setContentsMargins(0, 0, 0, 0)
+        self.options_stockfish_elo_selector = QtWidgets.QComboBox()
+        self.options_stockfish_elo_selector.setEditable(True)
+        for elo in (1200, 1600, 2000, 2400, 2800, 3200, 3600):
+            self.options_stockfish_elo_selector.addItem(str(elo))
+        self.options_stockfish_elo_selector.setCurrentText(str(self.human_stockfish_elo))
+        row_stockfish_elo_layout.addWidget(self.options_stockfish_elo_selector)
+        self.row_stockfish_elo.setLayout(row_stockfish_elo_layout)
+        self.label_stockfish_elo = QtWidgets.QLabel("Stockfish Elo")
+        form.addRow(self.label_stockfish_elo, self.row_stockfish_elo)
+        self.option_rows["stockfish_elo"] = (self.label_stockfish_elo, self.row_stockfish_elo)
 
         self.row_mcts_sim = QtWidgets.QWidget()
         row_mcts_sim_layout = QtWidgets.QHBoxLayout()
@@ -319,12 +344,27 @@ class MainWindow(QtWidgets.QMainWindow):
         self.options_white_ai_selector.addItem("Minimax Pure", "minimax")
         self.options_white_ai_selector.addItem("Monte Carlo", "mcts")
         self.options_white_ai_selector.addItem("Monte Carlo Heuristic", "mcts_heuristic")
+        self.options_white_ai_selector.addItem("UCI Engine", "uci")
         self.options_white_ai_selector.currentIndexChanged.connect(self._update_engine_specific_rows)
         row_white_layout.addWidget(self.options_white_ai_selector)
         self.row_white_ai.setLayout(row_white_layout)
         self.label_white_ai = QtWidgets.QLabel("White AI")
         form.addRow(self.label_white_ai, self.row_white_ai)
         self.option_rows["white_ai"] = (self.label_white_ai, self.row_white_ai)
+
+        self.row_white_stockfish_elo = QtWidgets.QWidget()
+        row_white_stockfish_elo_layout = QtWidgets.QHBoxLayout()
+        row_white_stockfish_elo_layout.setContentsMargins(0, 0, 0, 0)
+        self.options_white_stockfish_elo_selector = QtWidgets.QComboBox()
+        self.options_white_stockfish_elo_selector.setEditable(True)
+        for elo in (1200, 1600, 2000, 2400, 2800, 3200, 3600):
+            self.options_white_stockfish_elo_selector.addItem(str(elo))
+        self.options_white_stockfish_elo_selector.setCurrentText(str(self.white_stockfish_elo))
+        row_white_stockfish_elo_layout.addWidget(self.options_white_stockfish_elo_selector)
+        self.row_white_stockfish_elo.setLayout(row_white_stockfish_elo_layout)
+        self.label_white_stockfish_elo = QtWidgets.QLabel("White Stockfish Elo")
+        form.addRow(self.label_white_stockfish_elo, self.row_white_stockfish_elo)
+        self.option_rows["white_stockfish_elo"] = (self.label_white_stockfish_elo, self.row_white_stockfish_elo)
 
         self.row_white_depth = QtWidgets.QWidget()
         row_white_depth_layout = QtWidgets.QHBoxLayout()
@@ -374,6 +414,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.options_black_ai_selector.addItem("Minimax Pure", "minimax")
         self.options_black_ai_selector.addItem("Monte Carlo", "mcts")
         self.options_black_ai_selector.addItem("Monte Carlo Heuristic", "mcts_heuristic")
+        self.options_black_ai_selector.addItem("UCI Engine", "uci")
         self.options_black_ai_selector.setCurrentText("mcts")
         self.options_black_ai_selector.currentIndexChanged.connect(self._update_engine_specific_rows)
         row_black_layout.addWidget(self.options_black_ai_selector)
@@ -381,6 +422,20 @@ class MainWindow(QtWidgets.QMainWindow):
         self.label_black_ai = QtWidgets.QLabel("Black AI")
         form.addRow(self.label_black_ai, self.row_black_ai)
         self.option_rows["black_ai"] = (self.label_black_ai, self.row_black_ai)
+
+        self.row_black_stockfish_elo = QtWidgets.QWidget()
+        row_black_stockfish_elo_layout = QtWidgets.QHBoxLayout()
+        row_black_stockfish_elo_layout.setContentsMargins(0, 0, 0, 0)
+        self.options_black_stockfish_elo_selector = QtWidgets.QComboBox()
+        self.options_black_stockfish_elo_selector.setEditable(True)
+        for elo in (1200, 1600, 2000, 2400, 2800, 3200, 3600):
+            self.options_black_stockfish_elo_selector.addItem(str(elo))
+        self.options_black_stockfish_elo_selector.setCurrentText(str(self.black_stockfish_elo))
+        row_black_stockfish_elo_layout.addWidget(self.options_black_stockfish_elo_selector)
+        self.row_black_stockfish_elo.setLayout(row_black_stockfish_elo_layout)
+        self.label_black_stockfish_elo = QtWidgets.QLabel("Black Stockfish Elo")
+        form.addRow(self.label_black_stockfish_elo, self.row_black_stockfish_elo)
+        self.option_rows["black_stockfish_elo"] = (self.label_black_stockfish_elo, self.row_black_stockfish_elo)
 
         self.row_black_depth = QtWidgets.QWidget()
         row_black_depth_layout = QtWidgets.QHBoxLayout()
@@ -638,6 +693,19 @@ class MainWindow(QtWidgets.QMainWindow):
         label.setVisible(visible)
         widget.setVisible(visible)
 
+    def _find_stockfish_executable(self) -> str:
+        detected = shutil.which("stockfish")
+        if detected:
+            return detected
+        local_appdata = os.environ.get("LOCALAPPDATA")
+        if local_appdata:
+            packages_root = Path(local_appdata) / "Microsoft" / "WinGet" / "Packages"
+            if packages_root.exists():
+                for exe_path in packages_root.rglob("stockfish*.exe"):
+                    if exe_path.is_file():
+                        return str(exe_path)
+        return ""
+
     def _update_options_for_mode(self, mode: str) -> None:
         self.options_title.setText(f"Options - {self.menu_mode_selector.currentText()}")
 
@@ -647,6 +715,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self._set_option_row_visible("depth", not is_aiva)
         self._set_option_row_visible("mcts_sim", False)
         self._set_option_row_visible("mcts_rollout", False)
+        self._set_option_row_visible("stockfish_elo", False)
+        self._set_option_row_visible("white_stockfish_elo", False)
+        self._set_option_row_visible("black_stockfish_elo", False)
         self._set_option_row_visible("side", is_hva)
         self._set_option_row_visible("ai", is_hva)
         self._set_option_row_visible("white_ai", is_aiva)
@@ -659,11 +730,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self._set_option_row_visible("black_mcts_rollout", False)
 
         if is_hva:
-            self.label_depth.setText("Alpha-Beta Depth")
-            self.options_hint.setText("Choose side and AI. Alpha-Beta uses depth; Monte Carlo uses simulations + rollout depth.")
+            self.label_depth.setText("AI Depth")
+            self.options_hint.setText("Choose side and AI. If Stockfish is selected, just set Elo.")
             self.options_start_btn.setText("Start Game")
         elif is_aiva:
-            self.options_hint.setText("Set each side separately. Alpha-Beta uses depth; Monte Carlo uses simulations + rollout depth.")
+            self.options_hint.setText("Set each side separately. You can choose Stockfish for one or both sides and set Elo.")
             self.options_start_btn.setText("Start Game")
         elif mode == self.GAME_TEST_AB:
             self.label_depth.setText("Alpha-Beta Depth")
@@ -693,23 +764,34 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         if is_hva:
-            is_mcts = self.options_ai_selector.currentData() in ("mcts", "mcts_heuristic")
-            self._set_option_row_visible("depth", not is_mcts)
+            engine_key = self.options_ai_selector.currentData()
+            is_mcts = engine_key in ("mcts", "mcts_heuristic")
+            is_uci = engine_key == "uci"
+            self._set_option_row_visible("depth", not is_mcts and not is_uci)
             self._set_option_row_visible("mcts_sim", is_mcts)
             self._set_option_row_visible("mcts_rollout", is_mcts)
+            self._set_option_row_visible("stockfish_elo", is_uci)
+            self._set_option_row_visible("white_stockfish_elo", False)
+            self._set_option_row_visible("black_stockfish_elo", False)
             return
 
         if is_aiva:
-            white_is_mcts = self.options_white_ai_selector.currentData() in ("mcts", "mcts_heuristic")
-            black_is_mcts = self.options_black_ai_selector.currentData() in ("mcts", "mcts_heuristic")
-
-            self._set_option_row_visible("white_depth", not white_is_mcts)
+            white_engine = self.options_white_ai_selector.currentData()
+            black_engine = self.options_black_ai_selector.currentData()
+            white_is_mcts = white_engine in ("mcts", "mcts_heuristic")
+            black_is_mcts = black_engine in ("mcts", "mcts_heuristic")
+            white_is_uci = white_engine == "uci"
+            black_is_uci = black_engine == "uci"
+            self._set_option_row_visible("white_depth", not white_is_mcts and not white_is_uci)
             self._set_option_row_visible("white_mcts_sim", white_is_mcts)
             self._set_option_row_visible("white_mcts_rollout", white_is_mcts)
+            self._set_option_row_visible("white_stockfish_elo", white_is_uci)
 
-            self._set_option_row_visible("black_depth", not black_is_mcts)
+            self._set_option_row_visible("black_depth", not black_is_mcts and not black_is_uci)
             self._set_option_row_visible("black_mcts_sim", black_is_mcts)
             self._set_option_row_visible("black_mcts_rollout", black_is_mcts)
+            self._set_option_row_visible("black_stockfish_elo", black_is_uci)
+            self._set_option_row_visible("stockfish_elo", False)
 
     def _apply_alphabeta_from_options(self) -> None:
         depth = self.options_depth_selector.value()
@@ -727,6 +809,28 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _on_start_from_options(self) -> None:
         mode = self.selected_mode
+
+        human_stockfish_elo_text = self.options_stockfish_elo_selector.currentText().strip()
+        white_stockfish_elo_text = self.options_white_stockfish_elo_selector.currentText().strip()
+        black_stockfish_elo_text = self.options_black_stockfish_elo_selector.currentText().strip()
+        self.human_stockfish_elo = int(float(human_stockfish_elo_text)) if human_stockfish_elo_text else 2400
+        self.white_stockfish_elo = int(float(white_stockfish_elo_text)) if white_stockfish_elo_text else 2400
+        self.black_stockfish_elo = int(float(black_stockfish_elo_text)) if black_stockfish_elo_text else 2400
+        if mode == self.GAME_HUMAN_VS_AI:
+            needs_uci = self.options_ai_selector.currentData() == "uci"
+        elif mode == self.GAME_AI_VS_AI:
+            needs_uci = self.options_white_ai_selector.currentData() == "uci" or self.options_black_ai_selector.currentData() == "uci"
+        else:
+            needs_uci = False
+
+        if needs_uci:
+            if not self.uci_engine_path:
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "Stockfish not found",
+                    "Stockfish executable was not found in PATH or WinGet folder. Install Stockfish and restart app.",
+                )
+                return
 
         if mode == self.GAME_TEST_AB:
             self._apply_alphabeta_from_options()
@@ -794,6 +898,9 @@ class MainWindow(QtWidgets.QMainWindow):
             elif self.active_ai == "minimax":
                 model_name = "Minimax Pure"
                 options_text = f"d={self.human_ai_depth}"
+            elif self.active_ai == "uci":
+                model_name = "Stockfish"
+                options_text = f"elo={self.human_stockfish_elo}"
             elif self.active_ai == "mcts_heuristic":
                 model_name = "Monte Carlo Heuristic"
                 options_text = f"sims={self.human_mcts_simulations}, rd={self.human_mcts_rollout_depth}"
@@ -816,6 +923,9 @@ class MainWindow(QtWidgets.QMainWindow):
             elif self.white_ai == "minimax":
                 white_model = "Minimax Pure"
                 white_options = f"d={self.white_ai_depth}"
+            elif self.white_ai == "uci":
+                white_model = "Stockfish"
+                white_options = f"elo={self.white_stockfish_elo}"
             elif self.white_ai == "mcts_heuristic":
                 white_model = "Monte Carlo Heuristic"
                 white_options = f"sims={self.white_mcts_simulations}, rd={self.white_mcts_rollout_depth}"
@@ -829,6 +939,9 @@ class MainWindow(QtWidgets.QMainWindow):
             elif self.black_ai == "minimax":
                 black_model = "Minimax Pure"
                 black_options = f"d={self.black_ai_depth}"
+            elif self.black_ai == "uci":
+                black_model = "Stockfish"
+                black_options = f"elo={self.black_stockfish_elo}"
             elif self.black_ai == "mcts_heuristic":
                 black_model = "Monte Carlo Heuristic"
                 black_options = f"sims={self.black_mcts_simulations}, rd={self.black_mcts_rollout_depth}"
@@ -913,10 +1026,58 @@ class MainWindow(QtWidgets.QMainWindow):
     def _pick_ai_move(self):
         return self._pick_ai_move_for_board(self.board)
 
+    @staticmethod
+    def _elo_to_skill_level(elo: int) -> int:
+        bounded = max(100, min(3200, int(elo)))
+        return max(0, min(20, int(round((bounded - 100) * 20 / 3100))))
+
+    def _configure_uci_strength(self, uci_engine: chess.engine.SimpleEngine, requested_elo: int) -> int:
+        options = uci_engine.options
+        has_limit = "UCI_LimitStrength" in options
+        has_elo = "UCI_Elo" in options
+        has_skill = "Skill Level" in options
+
+        if has_elo:
+            elo_option = options["UCI_Elo"]
+            min_elo = getattr(elo_option, "min", None)
+            max_elo = getattr(elo_option, "max", None)
+
+            applied_elo = int(requested_elo)
+            if isinstance(min_elo, int):
+                applied_elo = max(applied_elo, min_elo)
+            if isinstance(max_elo, int):
+                applied_elo = min(applied_elo, max_elo)
+
+            cfg: Dict[str, object] = {"UCI_Elo": applied_elo}
+            if has_limit:
+                cfg["UCI_LimitStrength"] = True
+
+            # If requested Elo is out of UCI_Elo bounds, add Skill Level to preserve weakness/strength intent.
+            if has_skill and applied_elo != int(requested_elo):
+                cfg["Skill Level"] = self._elo_to_skill_level(int(requested_elo))
+
+            uci_engine.configure(cfg)
+            return applied_elo
+
+        if has_skill:
+            skill = self._elo_to_skill_level(int(requested_elo))
+            cfg_skill: Dict[str, object] = {"Skill Level": skill}
+            if has_limit:
+                cfg_skill["UCI_LimitStrength"] = False
+            uci_engine.configure(cfg_skill)
+            return int(requested_elo)
+
+        if has_limit:
+            uci_engine.configure({"UCI_LimitStrength": False})
+
+        raise chess.engine.EngineError("Engine does not expose UCI_Elo or Skill Level options")
+
     def _pick_ai_move_for_board(self, board: Board):
         if self.game_mode == self.GAME_HUMAN_VS_AI:
             if self.active_ai in ("alphabeta", "minimax"):
                 return self._pick_engine_move(self.active_ai, depth=self.human_ai_depth, board=board)
+            if self.active_ai == "uci":
+                return self._pick_engine_move(self.active_ai, stockfish_elo=self.human_stockfish_elo, board=board)
             return self._pick_engine_move(
                 self.active_ai,
                 simulations=self.human_mcts_simulations,
@@ -927,6 +1088,8 @@ class MainWindow(QtWidgets.QMainWindow):
         if board.turn == chess.WHITE:
             if self.white_ai in ("alphabeta", "minimax"):
                 return self._pick_engine_move(self.white_ai, depth=self.white_ai_depth, board=board)
+            if self.white_ai == "uci":
+                return self._pick_engine_move(self.white_ai, stockfish_elo=self.white_stockfish_elo, board=board)
             return self._pick_engine_move(
                 self.white_ai,
                 simulations=self.white_mcts_simulations,
@@ -936,6 +1099,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         if self.black_ai in ("alphabeta", "minimax"):
             return self._pick_engine_move(self.black_ai, depth=self.black_ai_depth, board=board)
+        if self.black_ai == "uci":
+            return self._pick_engine_move(self.black_ai, stockfish_elo=self.black_stockfish_elo, board=board)
         return self._pick_engine_move(
             self.black_ai,
             simulations=self.black_mcts_simulations,
@@ -949,14 +1114,31 @@ class MainWindow(QtWidgets.QMainWindow):
         depth: int = 1,
         simulations: int = 500,
         rollout_depth: int = 3,
+        stockfish_elo: int = 2400,
         board: Optional[Board] = None,
     ):
         active_board = board if board is not None else self.board
-        print(f"[GUI] picking engine={engine_name}", flush=True)
+        if engine_name == "uci":
+            if not self.uci_engine_path:
+                raise ValueError("UCI engine path is empty")
+            engine_path = Path(self.uci_engine_path).expanduser()
+            if not engine_path.exists():
+                raise ValueError(f"UCI engine not found: {engine_path}")
+
+            py_board = active_board.to_python_chess()
+            limit = chess.engine.Limit(time=max(1, self.uci_move_time_ms) / 1000.0)
+            with chess.engine.SimpleEngine.popen_uci(str(engine_path)) as uci_engine:
+                self._configure_uci_strength(uci_engine, int(stockfish_elo))
+                result = uci_engine.play(py_board, limit)
+            if result.move is None:
+                raise RuntimeError("UCI engine returned no move")
+            return result.move
+
         if engine_name == "alphabeta":
             return AlphaBetaAI(
                 depth=max(1, depth),
                 num_processes=max(1, self.settings.default_alphabeta_processes),
+                use_opening_book=self.settings.use_opening_book or self.settings.use_opening_book_alphabeta,
             ).choose_move(active_board)
         if engine_name == "minimax":
             return MinimaxAI(
@@ -972,6 +1154,7 @@ class MainWindow(QtWidgets.QMainWindow):
             rollout_eval_mix_alpha=self.settings.default_mcts_rollout_eval_mix_alpha,
             use_biased_rollout=self.settings.default_mcts_use_biased_rollout,
             rollout_mix_extra_depth=max(1, self.settings.default_mcts_rollout_mix_extra_depth),
+            use_opening_book=self.settings.use_opening_book or self.settings.use_opening_book_mcts,
         ).choose_move(active_board)
 
     def _refresh_status(self) -> None:

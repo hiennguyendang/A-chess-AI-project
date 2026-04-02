@@ -57,6 +57,17 @@ KING_CORNER_DISTANCE_PENALTY = 4
 QUEEN_TRADE_PHASE_MIN = 0.40
 QUEEN_TRADE_BONUS = 34
 
+# Extra MCTS-only shaping terms moved out of the shared AlphaBeta evaluator.
+MCTS_ENDGAME_TRIGGER_MINOR_PAIR_PAWNS_MAX = 5
+MCTS_ENDGAME_TRIGGER_MIXED_PAWNS_MAX = 3
+MCTS_ATTACKING_ENDGAME_KING_ACTIVITY_BONUS = 10
+MCTS_ATTACKING_ENDGAME_PAWN_ADVANCE_BONUS = 6
+MCTS_DEFENSIVE_COMPACTNESS_MULT = 6
+MCTS_DEFENSIVE_KING_SHELTER_BONUS = 10
+MCTS_PROMOTION_THREAT_BASE = 500
+MCTS_PROMOTION_THREAT_DEFENDED_BONUS = 100
+MCTS_PROMOTION_THREAT_PROMO_SQ_DEF_BONUS = 200
+
 SCRIPTED_ITALIAN_WHITE = [
     "e2e4",
     "g1f3",
@@ -224,7 +235,148 @@ def _opening_structure_cp(py_board: chess.Board) -> int:
 
 
 def evaluate_cp_for_mcts(py_board: chess.Board) -> int:
-    return Evaluator.evaluate(py_board) + _opening_structure_cp(py_board)
+    base_score = Evaluator.evaluate(py_board)
+    base_score += _opening_structure_cp(py_board)
+    base_score += _mcts_dynamic_endgame_posture_bonus(py_board)
+    base_score += _mcts_promotion_threat_bonus(py_board)
+    return base_score
+
+
+def _mcts_material_cp(py_board: chess.Board, color: chess.Color) -> int:
+    score = 0
+    for piece_type, value in PIECE_VALUE_CP.items():
+        if piece_type == chess.KING:
+            continue
+        score += value * len(py_board.pieces(piece_type, color))
+    return score
+
+
+def _mcts_opponent_endgame_profile(py_board: chess.Board, color: chess.Color) -> bool:
+    opponent = not color
+    opp_minors = len(py_board.pieces(chess.KNIGHT, opponent)) + len(py_board.pieces(chess.BISHOP, opponent))
+    opp_majors = len(py_board.pieces(chess.ROOK, opponent)) + len(py_board.pieces(chess.QUEEN, opponent))
+    opp_pawns = len(py_board.pieces(chess.PAWN, opponent))
+
+    profile_minor_pair = (
+        opp_majors == 0
+        and opp_minors == 2
+        and opp_pawns <= MCTS_ENDGAME_TRIGGER_MINOR_PAIR_PAWNS_MAX
+    )
+    profile_mixed = (
+        opp_majors == 1
+        and opp_minors == 1
+        and opp_pawns <= MCTS_ENDGAME_TRIGGER_MIXED_PAWNS_MAX
+    )
+    return profile_minor_pair or profile_mixed
+
+
+def _mcts_endgame_intent(py_board: chess.Board, color: chess.Color) -> int:
+    if not _mcts_opponent_endgame_profile(py_board, color):
+        return 0
+
+    our_cp = _mcts_material_cp(py_board, color)
+    opp_cp = _mcts_material_cp(py_board, not color)
+    if our_cp > opp_cp:
+        return 1
+    if our_cp < opp_cp:
+        return -1
+    return 0
+
+
+def _mcts_center_activity_score(py_board: chess.Board, color: chess.Color) -> int:
+    king_sq = py_board.king(color)
+    if king_sq is None:
+        return 0
+    center_squares = (chess.D4, chess.E4, chess.D5, chess.E5)
+    min_dist = min(chess.square_distance(king_sq, center_sq) for center_sq in center_squares)
+    return 4 - min_dist
+
+
+def _mcts_pawn_push_score(py_board: chess.Board, color: chess.Color) -> int:
+    score = 0
+    for sq in py_board.pieces(chess.PAWN, color):
+        rank_idx = chess.square_rank(sq)
+        progress = rank_idx - 1 if color == chess.WHITE else 6 - rank_idx
+        score += max(0, progress)
+    return score
+
+
+def _mcts_compactness_score(py_board: chess.Board, color: chess.Color) -> int:
+    king_sq = py_board.king(color)
+    if king_sq is None:
+        return 0
+
+    compactness = 0
+    tracked = (chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN)
+    for piece_type in tracked:
+        for sq in py_board.pieces(piece_type, color):
+            compactness += max(0, 5 - chess.square_distance(sq, king_sq))
+    return compactness
+
+
+def _mcts_king_shelter_score(py_board: chess.Board, color: chess.Color) -> int:
+    king_sq = py_board.king(color)
+    if king_sq is None:
+        return 0
+
+    rank_idx = chess.square_rank(king_sq)
+    shelter = 0
+    if color == chess.WHITE and rank_idx <= 1:
+        shelter += MCTS_DEFENSIVE_KING_SHELTER_BONUS
+    if color == chess.BLACK and rank_idx >= 6:
+        shelter += MCTS_DEFENSIVE_KING_SHELTER_BONUS
+    shelter += max(0, 4 - _min_corner_distance(king_sq))
+    return shelter
+
+
+def _mcts_dynamic_endgame_posture_bonus(py_board: chess.Board) -> int:
+    score = 0
+
+    white_intent = _mcts_endgame_intent(py_board, chess.WHITE)
+    if white_intent > 0:
+        score += MCTS_ATTACKING_ENDGAME_KING_ACTIVITY_BONUS * _mcts_center_activity_score(py_board, chess.WHITE)
+        score += MCTS_ATTACKING_ENDGAME_PAWN_ADVANCE_BONUS * _mcts_pawn_push_score(py_board, chess.WHITE)
+    elif white_intent < 0:
+        score += MCTS_DEFENSIVE_COMPACTNESS_MULT * _mcts_compactness_score(py_board, chess.WHITE)
+        score += _mcts_king_shelter_score(py_board, chess.WHITE)
+
+    black_intent = _mcts_endgame_intent(py_board, chess.BLACK)
+    if black_intent > 0:
+        score -= MCTS_ATTACKING_ENDGAME_KING_ACTIVITY_BONUS * _mcts_center_activity_score(py_board, chess.BLACK)
+        score -= MCTS_ATTACKING_ENDGAME_PAWN_ADVANCE_BONUS * _mcts_pawn_push_score(py_board, chess.BLACK)
+    elif black_intent < 0:
+        score -= MCTS_DEFENSIVE_COMPACTNESS_MULT * _mcts_compactness_score(py_board, chess.BLACK)
+        score -= _mcts_king_shelter_score(py_board, chess.BLACK)
+
+    return score
+
+
+def _mcts_promotion_pawn_threat(py_board: chess.Board, square: chess.Square, color: chess.Color) -> int:
+    rank_idx = chess.square_rank(square)
+    is_seventh = rank_idx == 6 if color == chess.WHITE else rank_idx == 1
+    if not is_seventh:
+        return 0
+
+    threat = MCTS_PROMOTION_THREAT_BASE
+    opponent = not color
+    if py_board.is_attacked_by(color, square):
+        threat += MCTS_PROMOTION_THREAT_DEFENDED_BONUS
+
+    file_idx = chess.square_file(square)
+    promo_rank = 7 if color == chess.WHITE else 0
+    promo_square = chess.square(file_idx, promo_rank)
+    if py_board.is_attacked_by(color, promo_square) and not py_board.is_attacked_by(opponent, promo_square):
+        threat += MCTS_PROMOTION_THREAT_PROMO_SQ_DEF_BONUS
+    return threat
+
+
+def _mcts_promotion_threat_bonus(py_board: chess.Board) -> int:
+    score = 0
+    for sq in py_board.pieces(chess.PAWN, chess.WHITE):
+        score += _mcts_promotion_pawn_threat(py_board, sq, chess.WHITE)
+    for sq in py_board.pieces(chess.PAWN, chess.BLACK):
+        score -= _mcts_promotion_pawn_threat(py_board, sq, chess.BLACK)
+    return score
 
 
 def is_immediate_non_losing_move(py_board: chess.Board, move: chess.Move) -> bool:
