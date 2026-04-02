@@ -10,7 +10,8 @@ from typing import List
 import chess
 from PyQt5 import QtCore, QtWidgets
 
-from ai.mcts import MCTS
+from ai.mcts import MCTS as StandardMCTS
+from ai.mcts_heuristic import MCTS as HeuristicMCTS
 from ai.minimax import MinimaxAI
 from config.settings import Settings
 from engine.board import Board
@@ -325,10 +326,32 @@ class MCTSBatchWindow(BaseBatchWindow):
     def _use_parallel_ai_moves(self) -> bool:
         return True
 
-    def _make_ai(self) -> MCTS:
+    def _make_ai(self) -> StandardMCTS:
         simulations = max(1, self.settings.default_simulations)
         rollout_depth = max(1, self.settings.default_depth)
-        return MCTS(
+        return StandardMCTS(
+            simulations=simulations,
+            rollout_depth=rollout_depth,
+            use_heuristic_eval=self.settings.default_mcts_use_heuristic,
+            num_threads=max(1, self.settings.default_mcts_processes),
+            rollout_eval_mix_alpha=self.settings.default_mcts_rollout_eval_mix_alpha,
+            use_biased_rollout=self.settings.default_mcts_use_biased_rollout,
+            rollout_mix_extra_depth=max(1, self.settings.default_mcts_rollout_mix_extra_depth),
+        )
+
+
+class MCTSHeuristicBatchWindow(BaseBatchWindow):
+    """Show 10 simultaneous MCTS-Heuristic-vs-Random games in one window."""
+
+    AI_NAME = "MCTS Heuristic"
+
+    def _use_parallel_ai_moves(self) -> bool:
+        return True
+
+    def _make_ai(self) -> HeuristicMCTS:
+        simulations = max(1, self.settings.default_simulations)
+        rollout_depth = max(1, self.settings.default_depth)
+        return HeuristicMCTS(
             simulations=simulations,
             rollout_depth=rollout_depth,
             use_heuristic_eval=self.settings.default_mcts_use_heuristic,

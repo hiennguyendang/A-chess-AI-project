@@ -14,6 +14,86 @@ from ai.utils import ucb1
 from engine.board import Board
 
 
+PIECE_VALUES = {
+    chess.PAWN: 100,
+    chess.KNIGHT: 320,
+    chess.BISHOP: 330,
+    chess.ROOK: 500,
+    chess.QUEEN: 900,
+    chess.KING: 0,
+}
+
+CHECK_BONUS = 60.0
+CHECKMATE_BONUS = 10_000.0
+PROMOTION_BONUS = {
+    chess.QUEEN: 80.0,
+    chess.ROOK: 45.0,
+    chess.BISHOP: 35.0,
+    chess.KNIGHT: 30.0,
+}
+DEFENDED_RISK_MULT = 0.35
+UNDEFENDED_RISK_MULT = 1.0
+TRADE_WEIGHT = 0.5
+
+
+def _captured_piece(board: chess.Board, move: chess.Move) -> Optional[chess.Piece]:
+    if not board.is_capture(move):
+        return None
+
+    if board.is_en_passant(move):
+        capture_square = chess.square(chess.square_file(move.to_square), chess.square_rank(move.from_square))
+        return board.piece_at(capture_square)
+
+    return board.piece_at(move.to_square)
+
+
+def _move_priority(board: chess.Board, move: chess.Move) -> float:
+    next_board = board.copy()
+    mover_color = board.turn
+    next_board.push(move)
+
+    moved_piece = next_board.piece_at(move.to_square)
+    if moved_piece is None:
+        return 0.0
+
+    moved_value = float(PIECE_VALUES[moved_piece.piece_type])
+    captured_piece = _captured_piece(board, move)
+    captured_value = float(PIECE_VALUES[captured_piece.piece_type]) if captured_piece is not None else 0.0
+
+    gain = captured_value
+    if next_board.is_checkmate():
+        gain += CHECKMATE_BONUS
+    elif next_board.is_check():
+        gain += CHECK_BONUS
+
+    if move.promotion is not None:
+        gain += max(0.0, float(PIECE_VALUES.get(move.promotion, 0)) - float(PIECE_VALUES[chess.PAWN]))
+
+    opponent_color = next_board.turn
+    attacked = bool(next_board.attackers(opponent_color, move.to_square))
+    defended = bool(next_board.attackers(mover_color, move.to_square))
+    risk = 0.0
+    if attacked:
+        risk = moved_value * (DEFENDED_RISK_MULT if defended else UNDEFENDED_RISK_MULT)
+
+    trade_value = 0.0
+    if captured_value > 0.0 and attacked:
+        trade_value = (captured_value - moved_value) * TRADE_WEIGHT
+
+    return gain + trade_value - risk
+
+
+def _choose_weighted_move(board: Board, moves: List[chess.Move], rng: random.Random) -> chess.Move:
+    if not moves:
+        raise ValueError("No legal moves available")
+
+    py_board = board.to_python_chess()
+    scores = [_move_priority(py_board, move) for move in moves]
+    min_score = min(scores)
+    weights = [max(1.0, score - min_score + 1.0) for score in scores]
+    return rng.choices(moves, weights=weights, k=1)[0]
+
+
 @dataclass
 class MCTSNode:
     board: Board
@@ -71,12 +151,8 @@ class MCTS:
         self.rollout_mix_extra_depth = max(1, rollout_mix_extra_depth)
 
     def choose_move(self, board: Board) -> chess.Move:
+        print("[MCTSHeuristic] choose_move called", flush=True)
         legal_moves = board.legal_chess_moves()
-
-        if self.use_heuristic_eval:
-            scripted = mcts_evaluator.scripted_castling_move(board, legal_moves)
-            if scripted is not None:
-                return scripted
 
         if parallel.should_parallelize(self.simulations, self.num_threads, len(legal_moves)):
             return self._choose_move_parallel(board)
@@ -116,7 +192,7 @@ class MCTS:
             rollout_eval_mix_alpha=self.rollout_eval_mix_alpha,
             use_biased_rollout=self.use_biased_rollout,
             rollout_mix_extra_depth=self.rollout_mix_extra_depth,
-            use_heuristic_engine=False,
+            use_heuristic_engine=True,
         )
         if move is None:
             return self._choose_move_single(board)
@@ -133,7 +209,7 @@ class MCTS:
         if node.is_terminal() or node.is_fully_expanded():
             return node
 
-        move = rng.choice(node.untried_moves)
+        move = _choose_weighted_move(node.board, node.untried_moves, rng)
         node.untried_moves.remove(move)
 
         new_board = node.board.copy()

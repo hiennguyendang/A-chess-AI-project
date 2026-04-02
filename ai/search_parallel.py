@@ -14,7 +14,7 @@ from engine.move_generator import MoveGenerator
 
 
 INF_SCORE = 10_000_000
-MCTSWorkerTask = Tuple[str, int, int, int, float, float, bool, float, bool, int]
+MCTSWorkerTask = Tuple[str, int, int, int, float, float, bool, float, bool, int, bool]
 AlphaBetaWorkerTask = Tuple[str, str, int, bool]
 MinimaxWorkerTask = Tuple[str, str, int, bool]
 
@@ -56,10 +56,17 @@ def _run_mcts_worker_task(task: MCTSWorkerTask) -> Dict[str, Tuple[float, int]]:
         rollout_eval_mix_alpha,
         use_biased_rollout,
         rollout_mix_extra_depth,
+        use_heuristic_engine,
     ) = task
 
-    # Local import avoids a module-level cycle with ai.mcts importing this module.
-    from ai.mcts import MCTS, MCTSNode
+    print(f"[MCTSWorker] heuristic_engine={use_heuristic_engine}", flush=True)
+
+    if use_heuristic_engine:
+        # Local import avoids a module-level cycle with ai.mcts_heuristic importing this module.
+        from ai.mcts_heuristic import MCTS, MCTSNode
+    else:
+        # Local import avoids a module-level cycle with ai.mcts importing this module.
+        from ai.mcts import MCTS, MCTSNode
 
     worker_board = Board(fen=fen)
     worker = MCTS(
@@ -102,6 +109,7 @@ def choose_move_parallel(
     rollout_eval_mix_alpha: float,
     use_biased_rollout: bool,
     rollout_mix_extra_depth: int,
+    use_heuristic_engine: bool = False,
 ) -> Optional[chess.Move]:
     legal_moves = board.legal_chess_moves()
     if not legal_moves:
@@ -130,6 +138,7 @@ def choose_move_parallel(
             rollout_eval_mix_alpha,
             use_biased_rollout,
             rollout_mix_extra_depth,
+            use_heuristic_engine,
         )
         for idx, sims in enumerate(sims_per_worker)
         if sims > 0
