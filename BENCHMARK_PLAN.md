@@ -40,24 +40,23 @@
 
 2. vs Minimax
 - d_minimax = 3: 10 game.
-- d_minimax = 5: 2 game.
-- Tổng: 12 game.
+- Tổng: 10 game.
 - Mục tiêu: chứng minh AlphaBeta nhanh hơn và kết quả ngang nhau.
 
 3. vs Stockfish
-- d_alphabeta = 3, 5.
+- d_alphabeta = 3.
 - Elo = 100 đến 1200 (tăng 100 mỗi lần)
 - Mỗi cặp (depth, elo): 2 game.
-- Tổng: 3 x 12 x 2 = 48 game.
+- Tổng: 12 x 2 = 24 game.
 
-Tổng block I: 70 game.
+Tổng block I: 44 game.
 
 ### II. AlphaBeta - Có Opening
 1. vs Random: 10 game.
-2. vs Minimax (d=3,5): 10 + 2 game.
-3. vs Stockfish (d=3,5; elo 100..1200): 48 game.
+2. vs Minimax (d=3): 10 game.
+3. vs Stockfish (d=3; elo 100..1200): 24 game.
 
-Tổng block II: 70 game.
+Tổng block II: 44 game.
 
 ### III. AlphaBeta - Có Opening vs Không Opening
 - AlphaBeta (opening on) vs AlphaBeta (opening off).
@@ -111,29 +110,29 @@ Mục tiêu: đo tác động độc lập của Heuristic và Opening trong n�
 Tổng block VII: 30 game.
 
 ### VIII. Đối đầu trực tiếp AlphaBeta vs MCTS
-Cấu hình cố định d_ab = 3, sim_mcts = 750, rd = 5, Trắng-Đen: 50%.
+Cấu hình cố định d_ab = 3, sim_mcts = 3000, rd = 5, Trắng-Đen: 50%.
 
 1. AlphaBeta (opening off) vs MCTS (no-heuristic, no-opening)
-- 20 game.
+- 10 game.
 
 2. AlphaBeta (opening off) vs MCTS (no-heuristic, opening on)
-- 20 game.
+- 10 game.
 
 3. AlphaBeta (opening off) vs MCTS (heuristic on, opening off)
-- 20 game.
+- 10 game.
 
 4. AlphaBeta (opening off) vs MCTS (heuristic on, opening on)
-- 20 game.
+- 10 game.
 
 5. AlphaBeta (opening on) vs MCTS (heuristic on, opening on)
-- 20 game.
+- 10 game.
 
-Tổng block VIII: 100 game.
+Tổng block VIII: 50 game.
 
 ---
 
 ## 4. Tổng khối lượng đề xuất
-- Tổng đầy đủ theo kịch bản hiện tại: 600 game.
+- Tổng đầy đủ theo kịch bản hiện tại: 396 game.
 
 ---
 
@@ -173,21 +172,21 @@ game_id,block_id,engine_white,engine_black,opening_white,opening_black,heuristic
 
 ### 6.3 Chia việc cụ thể cho 3 máy
 
-#### Máy Hiên (162 game)
-- Block I: 70 game.
+#### Máy Hiên (126 game)
+- Block I: 44 game.
 - Block V: 72 game.
-- Block VIII: chạy thêm 20 game đầu của block này.
+- Block VIII: chạy thêm 10 game đầu của block này.
 
-#### Máy Huy (162 game)
-- Block II: 102 game.
+#### Máy Huy (126 game)
+- Block II: 44 game.
 - Block VI: 72 game.
-- Block VIII: chạy thêm 20 game tiếp theo của block này.
+- Block VIII: chạy thêm 10 game tiếp theo của block này.
 
-#### Máy Nam (174 game)
+#### Máy Nam (144 game)
 - Block III: 12 game.
 - Block IV: 72 game.
 - Block VII: 30 game.
-- Block VIII: chạy phần còn lại 60 game.
+- Block VIII: chạy phần còn lại 30 game.
 
 ### 6.4 Lệnh chạy tự động cho 3 máy
 
@@ -220,17 +219,17 @@ Lệnh mẫu:
 
 Máy Hiên:
 ```bash
-python benchmark/run_distributed_benchmark.py --machine-id hien --skip-existing-scenarios --out-dir benchmark_results --alphabeta-processes 6 --minimax-processes 6 --mcts-threads 6
+python benchmark/run_distributed_benchmark.py --machine-id hien --skip-existing-scenarios --out-dir benchmark_results --alphabeta-processes 6 --minimax-processes 6 --mcts-threads 6 --show-ui
 ```
 
 Máy Huy:
 ```bash
-python benchmark/run_distributed_benchmark.py --machine-id huy --skip-existing-scenarios --out-dir benchmark_results --alphabeta-processes 6 --minimax-processes 6 --mcts-threads 6
+python benchmark/run_distributed_benchmark.py --machine-id huy --skip-existing-scenarios --out-dir benchmark_results --alphabeta-processes 6 --minimax-processes 6 --mcts-threads 6 --show-ui
 ```
 
 Máy Nam:
 ```bash
-python benchmark/run_distributed_benchmark.py --machine-id nam --skip-existing-scenarios --out-dir benchmark_results --alphabeta-processes 6 --minimax-processes 6 --mcts-threads 6
+python benchmark/run_distributed_benchmark.py --machine-id nam --skip-existing-scenarios --out-dir benchmark_results --alphabeta-processes 6 --minimax-processes 6 --mcts-threads 6 --show-ui
 ```
 
 Tham số bổ sung (tuỳ chọn):

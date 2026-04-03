@@ -27,6 +27,8 @@ from benchmark.distributed_benchmark_ui import maybe_create_monitor
 from engine.board import Board
 from engine.Rating_AI import configure_uci_strength, find_stockfish_executable, choose_uci_move
 
+TOTAL_RUNTIME_LIMIT_SECONDS = 6 * 60 * 60
+
 
 CSV_HEADER = [
     "game_id",
@@ -209,18 +211,14 @@ def build_all_scenarios() -> List[MatchScenario]:
     # I. AlphaBeta - Khong Opening
     scenarios.append(MatchScenario("I.1", 10, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("random")))
     scenarios.append(MatchScenario("I.2.d3", 10, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("minimax", depth=3)))
-    scenarios.append(MatchScenario("I.2.d5", 2, EngineSpec("alphabeta", opening="off", depth=5), EngineSpec("minimax", depth=5)))
-    for d in (3, 5):
-        for elo in range(100, 1201, 100):
-            scenarios.append(MatchScenario(f"I.3.d{d}.elo{elo}", 2, EngineSpec("alphabeta", opening="off", depth=d), EngineSpec("stockfish", stockfish_elo=elo)))
+    for elo in range(100, 1201, 100):
+        scenarios.append(MatchScenario(f"I.3.d3.elo{elo}", 2, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("stockfish", stockfish_elo=elo)))
 
     # II. AlphaBeta - Co Opening
     scenarios.append(MatchScenario("II.1", 10, EngineSpec("alphabeta", opening="on", depth=3), EngineSpec("random")))
     scenarios.append(MatchScenario("II.2.d3", 10, EngineSpec("alphabeta", opening="on", depth=3), EngineSpec("minimax", depth=3)))
-    scenarios.append(MatchScenario("II.2.d5", 2, EngineSpec("alphabeta", opening="on", depth=5), EngineSpec("minimax", depth=5)))
-    for d in (3, 5):
-        for elo in range(100, 1201, 100):
-            scenarios.append(MatchScenario(f"II.3.d{d}.elo{elo}", 2, EngineSpec("alphabeta", opening="on", depth=d), EngineSpec("stockfish", stockfish_elo=elo)))
+    for elo in range(100, 1201, 100):
+        scenarios.append(MatchScenario(f"II.3.d3.elo{elo}", 2, EngineSpec("alphabeta", opening="on", depth=3), EngineSpec("stockfish", stockfish_elo=elo)))
 
     # III. AlphaBeta on vs off
     scenarios.append(MatchScenario("III.d3", 10, EngineSpec("alphabeta", opening="on", depth=3), EngineSpec("alphabeta", opening="off", depth=3)))
@@ -248,11 +246,11 @@ def build_all_scenarios() -> List[MatchScenario]:
     scenarios.append(MatchScenario("VII.3", 10, EngineSpec("mcts_heuristic", opening="off", heuristic="on", simulations=1000, rollout_depth=5), EngineSpec("mcts_heuristic", opening="on", heuristic="on", simulations=1000, rollout_depth=5)))
 
     # VIII. AlphaBeta vs MCTS fixed configs
-    scenarios.append(MatchScenario("VIII.1", 20, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("mcts", opening="off", heuristic="off", simulations=750, rollout_depth=5)))
-    scenarios.append(MatchScenario("VIII.2", 20, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("mcts", opening="on", heuristic="off", simulations=750, rollout_depth=5)))
-    scenarios.append(MatchScenario("VIII.3", 20, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("mcts_heuristic", opening="off", heuristic="on", simulations=750, rollout_depth=5)))
-    scenarios.append(MatchScenario("VIII.4", 20, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("mcts_heuristic", opening="on", heuristic="on", simulations=750, rollout_depth=5)))
-    scenarios.append(MatchScenario("VIII.5", 20, EngineSpec("alphabeta", opening="on", depth=3), EngineSpec("mcts_heuristic", opening="on", heuristic="on", simulations=750, rollout_depth=5)))
+    scenarios.append(MatchScenario("VIII.1", 10, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("mcts", opening="off", heuristic="off", simulations=3000, rollout_depth=5)))
+    scenarios.append(MatchScenario("VIII.2", 10, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("mcts", opening="on", heuristic="off", simulations=3000, rollout_depth=5)))
+    scenarios.append(MatchScenario("VIII.3", 10, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("mcts_heuristic", opening="off", heuristic="on", simulations=3000, rollout_depth=5)))
+    scenarios.append(MatchScenario("VIII.4", 10, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("mcts_heuristic", opening="on", heuristic="on", simulations=3000, rollout_depth=5)))
+    scenarios.append(MatchScenario("VIII.5", 10, EngineSpec("alphabeta", opening="on", depth=3), EngineSpec("mcts_heuristic", opening="on", heuristic="on", simulations=3000, rollout_depth=5)))
 
     return scenarios
 
@@ -272,7 +270,8 @@ def assign_scenarios(machine_id: str, scenarios: List[MatchScenario]) -> List[Ma
     else:
         raise ValueError("machine-id must be one of: hien, huy, nam")
 
-    return sorted(chosen, key=lambda x: x.scenario_id)
+    # Keep construction order from build_all_scenarios so sim/elo progress naturally.
+    return chosen
 
 
 def slice_from_scenario(assigned: List[MatchScenario], start_from: Optional[str]) -> List[MatchScenario]:
@@ -297,7 +296,8 @@ def run_scenario(
     mcts_threads: int,
     on_game_done=None,
     monitor=None,
-) -> int:
+    run_deadline: Optional[float] = None,
+) -> tuple[int, bool]:
     random.seed(seed)
     rows: List[Dict[str, str]] = []
 
@@ -314,6 +314,7 @@ def run_scenario(
         mcts_threads=mcts_threads,
     )
 
+    timeout_reached = False
     for game_idx in range(1, scenario.games + 1):
         # Split colors 50/50.
         a_is_white = game_idx <= (scenario.games // 2)
@@ -355,6 +356,10 @@ def run_scenario(
                 configure_uci_strength(sf_engine, int(sf_elo or 1200))
 
             while not board.is_game_over(claim_draw=False) and plies < max_plies:
+                if run_deadline is not None and time.perf_counter() >= run_deadline:
+                    timeout_reached = True
+                    break
+
                 turn_is_white = board.turn == chess.WHITE
                 spec = white_spec if turn_is_white else black_spec
                 bot = white_bot if turn_is_white else black_bot
@@ -430,13 +435,16 @@ def run_scenario(
 
             if on_game_done is not None:
                 on_game_done(game_idx, scenario.games)
+
+            if timeout_reached:
+                break
         finally:
             if sf_engine is not None:
                 sf_engine.quit()
 
     out_csv = out_dir / scenario_output_name(scenario.scenario_id)
     write_rows(out_csv, rows)
-    return len(rows)
+    return len(rows), timeout_reached
 
 
 def main() -> None:
@@ -511,10 +519,15 @@ def main() -> None:
     print(f"Machine={args.machine_id} | Scenarios={len(assigned)} | Planned games={total_games}")
 
     run_started = time.perf_counter()
+    run_deadline = run_started + TOTAL_RUNTIME_LIMIT_SECONDS
     monitor = maybe_create_monitor(args.show_ui)
     completed = 0
     try:
         for idx, sc in enumerate(assigned, start=1):
+            if time.perf_counter() >= run_deadline:
+                print("[timeout] Reached total runtime limit (4 hours). Stopping benchmark.")
+                break
+
             out_csv = out_dir / scenario_output_name(sc.scenario_id)
             if args.skip_existing_scenarios and out_csv.exists():
                 print(f"[{idx}/{len(assigned)}] Skipping {sc.scenario_id} (existing file: {out_csv.name})")
@@ -538,7 +551,7 @@ def main() -> None:
                     f"ETA={format_duration(eta_now)}"
                 )
 
-            n = run_scenario(
+            n, timed_out = run_scenario(
                 sc,
                 out_dir=out_dir,
                 stockfish_path=stockfish_path,
@@ -550,6 +563,7 @@ def main() -> None:
                 mcts_threads=max(1, args.mcts_threads),
                 on_game_done=_on_game_done,
                 monitor=monitor,
+                run_deadline=run_deadline,
             )
             completed += n
             sc_elapsed = time.perf_counter() - sc_started
@@ -567,6 +581,10 @@ def main() -> None:
                 f"total_elapsed={format_duration(total_elapsed)} | "
                 f"ETA={format_duration(eta_sec)}"
             )
+
+            if timed_out:
+                print("[timeout] Reached total runtime limit (4 hours) during a game. Partial game was recorded.")
+                break
     finally:
         if monitor is not None:
             monitor.close()

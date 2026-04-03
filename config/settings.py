@@ -19,5 +19,5 @@ class Settings:
     # Backward-compatible global switch (applies to both models when True).
     use_opening_book: bool = False
     # Per-model switches requested for quick castling opening guidance.
-    use_opening_book_alphabeta: bool = True
+    use_opening_book_alphabeta: bool = False
     use_opening_book_mcts: bool = True
