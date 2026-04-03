@@ -1,0 +1,11 @@
+game_id,block_id,engine_white,engine_black,opening_white,opening_black,heuristic_white,heuristic_black,depth_white,depth_black,sim_white,sim_black,stockfish_elo,result_white,result_black,plies,avg_move_ms_white,p95_move_ms_white,max_move_ms_white,avg_move_ms_black,p95_move_ms_black,max_move_ms_black,max_material_swing_cp,blunder_white,blunder_black,white_castled_before_10,black_castled_before_10
+VII.2-001,VII.2,mcts,mcts,off,on,off,off,,,1000,1000,,W,L,125,527.31,600.51,751.54,450.81,579.52,798.84,1930,0,0,0,1
+VII.2-002,VII.2,mcts,mcts,off,on,off,off,,,1000,1000,,W,L,125,513.05,594.07,673.64,442.97,551.33,590.74,1930,0,0,0,1
+VII.2-003,VII.2,mcts,mcts,off,on,off,off,,,1000,1000,,W,L,125,531.65,636.07,699.66,458.21,613.28,710.79,1930,0,0,0,1
+VII.2-004,VII.2,mcts,mcts,off,on,off,off,,,1000,1000,,W,L,125,521.65,633.56,703.65,448.96,604.84,694.34,1930,0,0,0,1
+VII.2-005,VII.2,mcts,mcts,off,on,off,off,,,1000,1000,,W,L,125,567.17,661.52,864.92,490.39,615.51,809.07,1930,0,0,0,1
+VII.2-006,VII.2,mcts,mcts,on,off,off,off,,,1000,1000,,L,W,78,502.45,661.87,722.36,584.43,730.93,736.77,2150,0,0,1,0
+VII.2-007,VII.2,mcts,mcts,on,off,off,off,,,1000,1000,,L,W,78,474.17,653.97,737.97,534.68,698.15,706.65,2150,0,0,1,0
+VII.2-008,VII.2,mcts,mcts,on,off,off,off,,,1000,1000,,L,W,78,468.95,567.87,578.73,532.45,603.44,607.71,2150,0,0,1,0
+VII.2-009,VII.2,mcts,mcts,on,off,off,off,,,1000,1000,,L,W,78,485.94,590.34,774.82,540.99,622.89,698.87,2150,0,0,1,0
+VII.2-010,VII.2,mcts,mcts,on,off,off,off,,,1000,1000,,L,W,78,507.23,715.42,741.30,558.53,636.37,643.35,2150,0,0,1,0

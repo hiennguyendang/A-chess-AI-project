@@ -1,0 +1,11 @@
+game_id,block_id,engine_white,engine_black,opening_white,opening_black,heuristic_white,heuristic_black,depth_white,depth_black,sim_white,sim_black,stockfish_elo,result_white,result_black,plies,avg_move_ms_white,p95_move_ms_white,max_move_ms_white,avg_move_ms_black,p95_move_ms_black,max_move_ms_black,max_material_swing_cp,blunder_white,blunder_black,white_castled_before_10,black_castled_before_10
+VII.3-001,VII.3,mcts_heuristic,mcts_heuristic,off,on,on,on,,,1000,1000,,L,W,36,4135.33,4758.84,4758.84,2976.52,5146.17,5146.17,330,0,0,0,1
+VII.3-002,VII.3,mcts_heuristic,mcts_heuristic,off,on,on,on,,,1000,1000,,L,W,36,4435.58,6006.67,6006.67,3162.81,5733.63,5733.63,330,0,0,0,1
+VII.3-003,VII.3,mcts_heuristic,mcts_heuristic,off,on,on,on,,,1000,1000,,L,W,36,4296.25,4994.96,4994.96,3231.73,5546.88,5546.88,330,0,0,0,1
+VII.3-004,VII.3,mcts_heuristic,mcts_heuristic,off,on,on,on,,,1000,1000,,L,W,36,4105.83,4984.99,4984.99,2931.76,5315.78,5315.78,330,0,0,0,1
+VII.3-005,VII.3,mcts_heuristic,mcts_heuristic,off,on,on,on,,,1000,1000,,L,W,36,4274.25,5438.71,5438.71,3212.87,5992.94,5992.94,330,0,0,0,1
+VII.3-006,VII.3,mcts_heuristic,mcts_heuristic,on,off,on,on,,,1000,1000,,L,W,66,3164.07,5107.30,5121.83,3814.12,4530.40,4753.40,3200,0,0,1,0
+VII.3-007,VII.3,mcts_heuristic,mcts_heuristic,on,off,on,on,,,1000,1000,,L,W,66,3075.54,4946.77,5188.75,3709.00,4441.71,4758.27,3200,0,0,1,0
+VII.3-008,VII.3,mcts_heuristic,mcts_heuristic,on,off,on,on,,,1000,1000,,L,W,66,3057.33,5071.92,5177.57,3687.72,4746.29,4844.87,3200,0,0,1,0
+VII.3-009,VII.3,mcts_heuristic,mcts_heuristic,on,off,on,on,,,1000,1000,,L,W,66,3200.08,5451.77,5543.75,3955.12,5048.45,6450.19,3200,0,0,1,0
+VII.3-010,VII.3,mcts_heuristic,mcts_heuristic,on,off,on,on,,,1000,1000,,L,W,66,3020.75,4681.83,4694.89,3676.75,4489.50,4641.04,3200,0,0,1,0

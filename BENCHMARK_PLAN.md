@@ -61,8 +61,7 @@ Tổng block II: 44 game.
 ### III. AlphaBeta - Có Opening vs Không Opening
 - AlphaBeta (opening on) vs AlphaBeta (opening off).
 - d = 3: 10 game.
-- d = 5: 2 game.
-- Tổng: 12 game.
+- Tổng: 10 game.
 - Mục tiêu: đo đóng góp thực tế của opening book.
 
 ### IV. Monte Carlo - Không Heuristic, Không Opening
@@ -130,6 +129,9 @@ Cấu hình cố định d_ab = 3, sim_mcts = 3000, rd = 5, Trắng-Đen: 50%.
 Tổng block VIII: 50 game.
 
 ---
+### VIII. Đối đầu trực tiếp AlphaBeta vs MCTS (Tương tự trên)
+Cấu hình cố định d_ab = 3, sim_mcts = 5000, rd = 7, Trắng-Đen: 50%.
+
 
 ## 4. Tổng khối lượng đề xuất
 - Tổng đầy đủ theo kịch bản hiện tại: 396 game.
