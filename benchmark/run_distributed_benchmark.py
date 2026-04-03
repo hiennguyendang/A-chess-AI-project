@@ -254,12 +254,12 @@ def build_all_scenarios() -> List[MatchScenario]:
     scenarios.append(MatchScenario("VIII.4", 5, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("mcts_heuristic", opening="on", heuristic="on", simulations=3000, rollout_depth=5)))
     scenarios.append(MatchScenario("VIII.5", 5, EngineSpec("alphabeta", opening="on", depth=3), EngineSpec("mcts_heuristic", opening="on", heuristic="on", simulations=3000, rollout_depth=5)))
     # IX. AlphaBeta vs MCTS fixed configs with more sims and depth
-    scenarios.append(MatchScenario("IX.1", 5, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("mcts", opening="off", heuristic="off", simulations=6000, rollout_depth=7)))
-    scenarios.append(MatchScenario("IX.2", 5, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("mcts", opening="on", heuristic="off", simulations=6000, rollout_depth=7)))
-    scenarios.append(MatchScenario("IX.3", 5, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("mcts_heuristic", opening="off", heuristic="on", simulations=6000, rollout_depth=7)))
-    scenarios.append(MatchScenario("IX.4", 5, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("mcts_heuristic", opening="on", heuristic="on", simulations=6000, rollout_depth=7)))
-    scenarios.append(MatchScenario("IX.5", 5, EngineSpec("alphabeta", opening="on", depth=3), EngineSpec("mcts_heuristic", opening="on", heuristic="on", simulations=6000, rollout_depth=7)))
-    scenarios.append(MatchScenario("IX.6", 5, EngineSpec("alphabeta", opening="on", depth=3), EngineSpec("mcts", opening="on", heuristic="off", simulations=6000, rollout_depth=7)))
+    scenarios.append(MatchScenario("IX.1", 5, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("mcts", opening="off", heuristic="off", simulations=5000, rollout_depth=7)))
+    scenarios.append(MatchScenario("IX.2", 5, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("mcts", opening="on", heuristic="off", simulations=5000, rollout_depth=7)))
+    scenarios.append(MatchScenario("IX.3", 5, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("mcts_heuristic", opening="off", heuristic="on", simulations=5000, rollout_depth=7)))
+    scenarios.append(MatchScenario("IX.4", 5, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("mcts_heuristic", opening="on", heuristic="on", simulations=5000, rollout_depth=7)))
+    scenarios.append(MatchScenario("IX.5", 5, EngineSpec("alphabeta", opening="on", depth=3), EngineSpec("mcts_heuristic", opening="on", heuristic="on", simulations=5000, rollout_depth=7)))
+    scenarios.append(MatchScenario("IX.6", 5, EngineSpec("alphabeta", opening="on", depth=3), EngineSpec("mcts", opening="on", heuristic="off", simulations=5000, rollout_depth=7)))
 
     return scenarios
 

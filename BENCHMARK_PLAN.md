@@ -131,7 +131,7 @@ Tổng block VIII: 25 game.
 
 ---
 ### VIII. Đối đầu trực tiếp AlphaBeta vs MCTS (Tương tự trên)
-Cấu hình cố định d_ab = 3, sim_mcts = 6000, rd = 7, Trắng-Đen: 50%.
+Cấu hình cố định d_ab = 3, sim_mcts = 5000, rd = 7, Trắng-Đen: 50%.
 
 
 ## 4. Tổng khối lượng đề xuất
