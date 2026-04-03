@@ -40,30 +40,30 @@
 
 2. vs Minimax
 - d_minimax = 3: 10 game.
-- d_minimax = 5: 10 game.
-- Tổng: 20 game.
+- d_minimax = 5: 2 game.
+- Tổng: 12 game.
 - Mục tiêu: chứng minh AlphaBeta nhanh hơn và kết quả ngang nhau.
 
 3. vs Stockfish
-- d_alphabeta = 3, 5, 7.
+- d_alphabeta = 3, 5.
 - Elo = 100 đến 1200 (tăng 100 mỗi lần)
 - Mỗi cặp (depth, elo): 2 game.
-- Tổng: 3 x 12 x 2 = 72 game.
+- Tổng: 3 x 12 x 2 = 48 game.
 
-Tổng block I: 102 game.
+Tổng block I: 70 game.
 
 ### II. AlphaBeta - Có Opening
 1. vs Random: 10 game.
-2. vs Minimax (d=3,5): 20 game.
-3. vs Stockfish (d=3,5,7; elo 100..1200): 72 game.
+2. vs Minimax (d=3,5): 10 + 2 game.
+3. vs Stockfish (d=3,5; elo 100..1200): 48 game.
 
-Tổng block II: 102 game.
+Tổng block II: 70 game.
 
 ### III. AlphaBeta - Có Opening vs Không Opening
 - AlphaBeta (opening on) vs AlphaBeta (opening off).
 - d = 3: 10 game.
-- d = 5: 10 game.
-- Tổng: 20 game.
+- d = 5: 2 game.
+- Tổng: 12 game.
 - Mục tiêu: đo đóng góp thực tế của opening book.
 
 ### IV. Monte Carlo - Không Heuristic, Không Opening
@@ -78,16 +78,22 @@ Tổng block II: 102 game.
 Tổng block IV: 82 game.
 
 ### V. Monte Carlo - Có Heuristic, Không Opening
-- Giữ nguyên cấu trúc như block IV.
-
-Tổng block V: 82 game.
+vs Stockfish
+- simulations = 500, 1000, 2000.
+- rd = 5
+- elo 100..1200 (tăng 100 mỗi lần).
+- 2 game mỗi cặp.
+- Tổng: 72 game.
 
 ### VI. Monte Carlo - Có Heuristic, Có Opening
-- Giữ nguyên cấu trúc như block IV.
+vs Stockfish
+- simulations = 500, 1000, 2000.
+- rd = 5
+- elo 100..1200 (tăng 100 mỗi lần).
+- 2 game mỗi cặp.
+- Tổng: 72 game.
 
-Tổng block VI: 82 game.
-
-### VII. MCTS đấu lẫn nhau (gói nhẹ)
+### VII. MCTS đấu lẫn nhau
 Mục tiêu: đo tác động độc lập của Heuristic và Opening trong nội bộ MCTS.
 
 1. MCTS (no-heuristic, no-opening) vs MCTS (heuristic, no-opening)
@@ -167,19 +173,19 @@ game_id,block_id,engine_white,engine_black,opening_white,opening_black,heuristic
 
 ### 6.3 Chia việc cụ thể cho 3 máy
 
-#### Máy Hiên (204 game)
-- Block I: 102 game.
-- Block V: 82 game.
+#### Máy Hiên (162 game)
+- Block I: 70 game.
+- Block V: 72 game.
 - Block VIII: chạy thêm 20 game đầu của block này.
 
-#### Máy Huy (204 game)
+#### Máy Huy (162 game)
 - Block II: 102 game.
-- Block VI: 82 game.
+- Block VI: 72 game.
 - Block VIII: chạy thêm 20 game tiếp theo của block này.
 
-#### Máy Nam (192 game)
-- Block III: 20 game.
-- Block IV: 82 game.
+#### Máy Nam (174 game)
+- Block III: 12 game.
+- Block IV: 72 game.
 - Block VII: 30 game.
 - Block VIII: chạy phần còn lại 60 game.
 

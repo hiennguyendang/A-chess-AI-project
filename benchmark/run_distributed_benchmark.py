@@ -127,6 +127,14 @@ def format_float(v: float) -> str:
     return f"{v:.2f}"
 
 
+def format_duration(seconds: float) -> str:
+    total = max(0, int(round(seconds)))
+    h = total // 3600
+    m = (total % 3600) // 60
+    s = total % 60
+    return f"{h:02d}:{m:02d}:{s:02d}"
+
+
 def make_bot(spec: EngineSpec, alphabeta_processes: int, minimax_processes: int, mcts_threads: int):
     if spec.kind == "alphabeta":
         return AlphaBetaAI(
@@ -200,22 +208,22 @@ def build_all_scenarios() -> List[MatchScenario]:
     # I. AlphaBeta - Khong Opening
     scenarios.append(MatchScenario("I.1", 10, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("random")))
     scenarios.append(MatchScenario("I.2.d3", 10, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("minimax", depth=3)))
-    scenarios.append(MatchScenario("I.2.d5", 10, EngineSpec("alphabeta", opening="off", depth=5), EngineSpec("minimax", depth=5)))
-    for d in (3, 5, 7):
+    scenarios.append(MatchScenario("I.2.d5", 2, EngineSpec("alphabeta", opening="off", depth=5), EngineSpec("minimax", depth=5)))
+    for d in (3, 5):
         for elo in range(100, 1201, 100):
             scenarios.append(MatchScenario(f"I.3.d{d}.elo{elo}", 2, EngineSpec("alphabeta", opening="off", depth=d), EngineSpec("stockfish", stockfish_elo=elo)))
 
     # II. AlphaBeta - Co Opening
     scenarios.append(MatchScenario("II.1", 10, EngineSpec("alphabeta", opening="on", depth=3), EngineSpec("random")))
     scenarios.append(MatchScenario("II.2.d3", 10, EngineSpec("alphabeta", opening="on", depth=3), EngineSpec("minimax", depth=3)))
-    scenarios.append(MatchScenario("II.2.d5", 10, EngineSpec("alphabeta", opening="on", depth=5), EngineSpec("minimax", depth=5)))
-    for d in (3, 5, 7):
+    scenarios.append(MatchScenario("II.2.d5", 2, EngineSpec("alphabeta", opening="on", depth=5), EngineSpec("minimax", depth=5)))
+    for d in (3, 5):
         for elo in range(100, 1201, 100):
             scenarios.append(MatchScenario(f"II.3.d{d}.elo{elo}", 2, EngineSpec("alphabeta", opening="on", depth=d), EngineSpec("stockfish", stockfish_elo=elo)))
 
     # III. AlphaBeta on vs off
     scenarios.append(MatchScenario("III.d3", 10, EngineSpec("alphabeta", opening="on", depth=3), EngineSpec("alphabeta", opening="off", depth=3)))
-    scenarios.append(MatchScenario("III.d5", 10, EngineSpec("alphabeta", opening="on", depth=5), EngineSpec("alphabeta", opening="off", depth=5)))
+    scenarios.append(MatchScenario("III.d5", 2, EngineSpec("alphabeta", opening="on", depth=5), EngineSpec("alphabeta", opening="off", depth=5)))
 
     # IV. MCTS no heuristic, no opening
     scenarios.append(MatchScenario("IV.1", 10, EngineSpec("mcts", opening="off", heuristic="off", simulations=1000, rollout_depth=5), EngineSpec("random")))
@@ -224,16 +232,14 @@ def build_all_scenarios() -> List[MatchScenario]:
             scenarios.append(MatchScenario(f"IV.2.sim{sim}.elo{elo}", 2, EngineSpec("mcts", opening="off", heuristic="off", simulations=sim, rollout_depth=5), EngineSpec("stockfish", stockfish_elo=elo)))
 
     # V. MCTS heuristic on, opening off
-    scenarios.append(MatchScenario("V.1", 10, EngineSpec("mcts_heuristic", opening="off", heuristic="on", simulations=1000, rollout_depth=5), EngineSpec("random")))
     for sim in (500, 1000, 2000):
         for elo in range(100, 1201, 100):
-            scenarios.append(MatchScenario(f"V.2.sim{sim}.elo{elo}", 2, EngineSpec("mcts_heuristic", opening="off", heuristic="on", simulations=sim, rollout_depth=5), EngineSpec("stockfish", stockfish_elo=elo)))
+            scenarios.append(MatchScenario(f"V.1.sim{sim}.elo{elo}", 2, EngineSpec("mcts_heuristic", opening="off", heuristic="on", simulations=sim, rollout_depth=5), EngineSpec("stockfish", stockfish_elo=elo)))
 
     # VI. MCTS heuristic on, opening on
-    scenarios.append(MatchScenario("VI.1", 10, EngineSpec("mcts_heuristic", opening="on", heuristic="on", simulations=1000, rollout_depth=5), EngineSpec("random")))
     for sim in (500, 1000, 2000):
         for elo in range(100, 1201, 100):
-            scenarios.append(MatchScenario(f"VI.2.sim{sim}.elo{elo}", 2, EngineSpec("mcts_heuristic", opening="on", heuristic="on", simulations=sim, rollout_depth=5), EngineSpec("stockfish", stockfish_elo=elo)))
+            scenarios.append(MatchScenario(f"VI.1.sim{sim}.elo{elo}", 2, EngineSpec("mcts_heuristic", opening="on", heuristic="on", simulations=sim, rollout_depth=5), EngineSpec("stockfish", stockfish_elo=elo)))
 
     # VII. MCTS self-play light
     scenarios.append(MatchScenario("VII.1", 10, EngineSpec("mcts", opening="off", heuristic="off", simulations=1000, rollout_depth=5), EngineSpec("mcts_heuristic", opening="off", heuristic="on", simulations=1000, rollout_depth=5)))
@@ -460,8 +466,10 @@ def main() -> None:
     total_games = sum(s.games for s in assigned)
     print(f"Machine={args.machine_id} | Scenarios={len(assigned)} | Planned games={total_games}")
 
+    run_started = time.perf_counter()
     completed = 0
     for idx, sc in enumerate(assigned, start=1):
+        sc_started = time.perf_counter()
         print(f"[{idx}/{len(assigned)}] Running {sc.scenario_id} ({sc.games} games)")
         n = run_scenario(
             sc,
@@ -475,9 +483,24 @@ def main() -> None:
             mcts_threads=max(1, args.mcts_threads),
         )
         completed += n
-        print(f"  -> wrote {n} rows | cumulative={completed}")
+        sc_elapsed = time.perf_counter() - sc_started
+        total_elapsed = time.perf_counter() - run_started
 
-    print(f"Done. Total rows written: {completed}")
+        games_done = completed
+        games_left = max(0, total_games - games_done)
+        avg_sec_per_game = (total_elapsed / games_done) if games_done > 0 else 0.0
+        eta_sec = avg_sec_per_game * games_left
+
+        print(
+            "  -> wrote "
+            f"{n} rows | cumulative={completed} | "
+            f"scenario_elapsed={format_duration(sc_elapsed)} | "
+            f"total_elapsed={format_duration(total_elapsed)} | "
+            f"ETA={format_duration(eta_sec)}"
+        )
+
+    total_elapsed = time.perf_counter() - run_started
+    print(f"Done. Total rows written: {completed} | total_runtime={format_duration(total_elapsed)}")
 
 
 if __name__ == "__main__":
