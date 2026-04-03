@@ -274,6 +274,16 @@ def assign_scenarios(machine_id: str, scenarios: List[MatchScenario]) -> List[Ma
     return sorted(chosen, key=lambda x: x.scenario_id)
 
 
+def slice_from_scenario(assigned: List[MatchScenario], start_from: Optional[str]) -> List[MatchScenario]:
+    if not start_from:
+        return assigned
+    for idx, sc in enumerate(assigned):
+        if sc.scenario_id == start_from:
+            return assigned[idx:]
+    available = ", ".join(sc.scenario_id for sc in assigned)
+    raise ValueError(f"start-from scenario '{start_from}' not found. Available: {available}")
+
+
 def run_scenario(
     scenario: MatchScenario,
     out_dir: Path,
@@ -418,6 +428,12 @@ def main() -> None:
     parser.add_argument("--alphabeta-processes", type=int, default=6, help="Worker processes for AlphaBeta")
     parser.add_argument("--minimax-processes", type=int, default=6, help="Worker processes for Minimax")
     parser.add_argument("--mcts-threads", type=int, default=6, help="Worker threads for MCTS variants")
+    parser.add_argument("--start-from", default=None, help="Resume from this scenario_id (inclusive), e.g. I.2.d5")
+    parser.add_argument(
+        "--skip-existing-scenarios",
+        action="store_true",
+        help="Skip scenario if its output CSV already exists",
+    )
     args = parser.parse_args()
 
     out_dir = (PROJECT_ROOT / args.out_dir).resolve()
@@ -462,6 +478,7 @@ def main() -> None:
 
     scenarios = build_all_scenarios()
     assigned = assign_scenarios(args.machine_id, scenarios)
+    assigned = slice_from_scenario(assigned, args.start_from)
 
     total_games = sum(s.games for s in assigned)
     print(f"Machine={args.machine_id} | Scenarios={len(assigned)} | Planned games={total_games}")
@@ -469,6 +486,11 @@ def main() -> None:
     run_started = time.perf_counter()
     completed = 0
     for idx, sc in enumerate(assigned, start=1):
+        out_csv = out_dir / scenario_output_name(sc.scenario_id)
+        if args.skip_existing_scenarios and out_csv.exists():
+            print(f"[{idx}/{len(assigned)}] Skipping {sc.scenario_id} (existing file: {out_csv.name})")
+            continue
+
         sc_started = time.perf_counter()
         print(f"[{idx}/{len(assigned)}] Running {sc.scenario_id} ({sc.games} games)")
         n = run_scenario(
