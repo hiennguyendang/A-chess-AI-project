@@ -220,7 +220,8 @@ Lệnh mẫu:
 
 Máy Hiên:
 ```bash
-python benchmark/run_distributed_benchmark.py --machine-id hien --skip-existing-scenarios --out-dir benchmark_results --alphabeta-processes 6 --minimax-processes 6 --mcts-threads 6```
+python benchmark/run_distributed_benchmark.py --machine-id hien --skip-existing-scenarios --out-dir benchmark_results --alphabeta-processes 6 --minimax-processes 6 --mcts-threads 6
+```
 
 Máy Huy:
 ```bash
