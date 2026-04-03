@@ -294,6 +294,7 @@ def run_scenario(
     alphabeta_processes: int,
     minimax_processes: int,
     mcts_threads: int,
+    on_game_done=None,
 ) -> int:
     random.seed(seed)
     rows: List[Dict[str, str]] = []
@@ -408,6 +409,9 @@ def run_scenario(
                 "black_castled_before_10": str(black_castled_before_10),
             }
             rows.append(row)
+
+            if on_game_done is not None:
+                on_game_done(game_idx, scenario.games)
         finally:
             if sf_engine is not None:
                 sf_engine.quit()
@@ -493,6 +497,22 @@ def main() -> None:
 
         sc_started = time.perf_counter()
         print(f"[{idx}/{len(assigned)}] Running {sc.scenario_id} ({sc.games} games)")
+
+        def _on_game_done(game_idx: int, game_total: int) -> None:
+            nonlocal completed
+            sc_elapsed_now = time.perf_counter() - sc_started
+            total_elapsed_now = time.perf_counter() - run_started
+            done_total_now = completed + game_idx
+            left_total_now = max(0, total_games - done_total_now)
+            sec_per_game = (total_elapsed_now / done_total_now) if done_total_now > 0 else 0.0
+            eta_now = sec_per_game * left_total_now
+            print(
+                f"    game {game_idx}/{game_total} | "
+                f"scenario_elapsed={format_duration(sc_elapsed_now)} | "
+                f"total_elapsed={format_duration(total_elapsed_now)} | "
+                f"ETA={format_duration(eta_now)}"
+            )
+
         n = run_scenario(
             sc,
             out_dir=out_dir,
@@ -503,6 +523,7 @@ def main() -> None:
             alphabeta_processes=max(1, args.alphabeta_processes),
             minimax_processes=max(1, args.minimax_processes),
             mcts_threads=max(1, args.mcts_threads),
+            on_game_done=_on_game_done,
         )
         completed += n
         sc_elapsed = time.perf_counter() - sc_started
