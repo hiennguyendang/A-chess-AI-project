@@ -62,8 +62,7 @@ Tổng block II: 70 game.
 ### III. AlphaBeta - Có Opening vs Không Opening
 - AlphaBeta (opening on) vs AlphaBeta (opening off).
 - d = 3: 10 game.
-- d = 5: 2 game.
-- Tổng: 12 game.
+- Tổng: 10 game.
 - Mục tiêu: đo đóng góp thực tế của opening book.
 
 ### IV. Monte Carlo - Không Heuristic, Không Opening
@@ -114,26 +113,29 @@ Tổng block VII: 30 game.
 Cấu hình cố định d_ab = 3, sim_mcts = 750, rd = 5, Trắng-Đen: 50%.
 
 1. AlphaBeta (opening off) vs MCTS (no-heuristic, no-opening)
-- 20 game.
+- 5 game.
 
 2. AlphaBeta (opening off) vs MCTS (no-heuristic, opening on)
-- 20 game.
+- 5 game.
 
 3. AlphaBeta (opening off) vs MCTS (heuristic on, opening off)
-- 20 game.
+- 5 game.
 
 4. AlphaBeta (opening off) vs MCTS (heuristic on, opening on)
-- 20 game.
+- 5 game.
 
 5. AlphaBeta (opening on) vs MCTS (heuristic on, opening on)
-- 20 game.
+- 5 game.
 
-Tổng block VIII: 100 game.
+Tổng block VIII: 25 game.
 
 ---
+### VIII. Đối đầu trực tiếp AlphaBeta vs MCTS (Tương tự trên)
+Cấu hình cố định d_ab = 3, sim_mcts = 6000, rd = 7, Trắng-Đen: 50%.
+
 
 ## 4. Tổng khối lượng đề xuất
-- Tổng đầy đủ theo kịch bản hiện tại: 600 game.
+- Tổng đầy đủ theo kịch bản hiện tại: 550 game.
 
 ---
 
@@ -176,18 +178,21 @@ game_id,block_id,engine_white,engine_black,opening_white,opening_black,heuristic
 #### Máy Hiên (162 game)
 - Block I: 70 game.
 - Block V: 72 game.
-- Block VIII: chạy thêm 20 game đầu của block này.
+- Block VIII: chạy thêm 5 game đầu của block này.
+- Block IX: Chạy 10 game đầu
 
 #### Máy Huy (162 game)
 - Block II: 102 game.
 - Block VI: 72 game.
-- Block VIII: chạy thêm 20 game tiếp theo của block này.
+- Block VIII: chạy thêm 5 game tiếp theo của block này.
+- Block IX: Chạy 10 game tiếp
 
 #### Máy Nam (174 game)
-- Block III: 12 game.
+- Block III: 10 game.
 - Block IV: 72 game.
 - Block VII: 30 game.
-- Block VIII: chạy phần còn lại 60 game.
+- Block VIII: chạy phần còn lại 15 game.
+- Block IX: - Block IX: Chạy 10 game cuối
 
 ### 6.4 Lệnh chạy tự động cho 3 máy
 

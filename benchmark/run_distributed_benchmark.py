@@ -253,6 +253,13 @@ def build_all_scenarios() -> List[MatchScenario]:
     scenarios.append(MatchScenario("VIII.3", 5, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("mcts_heuristic", opening="off", heuristic="on", simulations=3000, rollout_depth=5)))
     scenarios.append(MatchScenario("VIII.4", 5, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("mcts_heuristic", opening="on", heuristic="on", simulations=3000, rollout_depth=5)))
     scenarios.append(MatchScenario("VIII.5", 5, EngineSpec("alphabeta", opening="on", depth=3), EngineSpec("mcts_heuristic", opening="on", heuristic="on", simulations=3000, rollout_depth=5)))
+    # IX. AlphaBeta vs MCTS fixed configs with more sims and depth
+    scenarios.append(MatchScenario("IX.1", 5, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("mcts", opening="off", heuristic="off", simulations=6000, rollout_depth=7)))
+    scenarios.append(MatchScenario("IX.2", 5, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("mcts", opening="on", heuristic="off", simulations=6000, rollout_depth=7)))
+    scenarios.append(MatchScenario("IX.3", 5, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("mcts_heuristic", opening="off", heuristic="on", simulations=6000, rollout_depth=7)))
+    scenarios.append(MatchScenario("IX.4", 5, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("mcts_heuristic", opening="on", heuristic="on", simulations=6000, rollout_depth=7)))
+    scenarios.append(MatchScenario("IX.5", 5, EngineSpec("alphabeta", opening="on", depth=3), EngineSpec("mcts_heuristic", opening="on", heuristic="on", simulations=6000, rollout_depth=7)))
+    scenarios.append(MatchScenario("IX.6", 5, EngineSpec("alphabeta", opening="on", depth=3), EngineSpec("mcts", opening="on", heuristic="off", simulations=6000, rollout_depth=7)))
 
     return scenarios
 
@@ -264,11 +271,11 @@ def assign_scenarios(machine_id: str, scenarios: List[MatchScenario]) -> List[Ma
         by_prefix.setdefault(prefix, []).append(sc)
 
     if machine_id == "hien":
-        chosen = by_prefix.get("I", []) + by_prefix.get("V", []) + [s for s in by_prefix.get("VIII", []) if s.scenario_id == "VIII.1"]
+        chosen = by_prefix.get("I", []) + by_prefix.get("V", []) + [s for s in by_prefix.get("VIII", []) if s.scenario_id == "VIII.1"] + [s for s in by_prefix.get("IX", []) if s.scenario_id in {"IX.3", "IX.4"}]
     elif machine_id == "huy":
-        chosen = by_prefix.get("II", []) + by_prefix.get("VI", []) + [s for s in by_prefix.get("VIII", []) if s.scenario_id == "VIII.2"]
+        chosen = by_prefix.get("II", []) + by_prefix.get("VI", []) + [s for s in by_prefix.get("VIII", []) if s.scenario_id == "VIII.2"] + [s for s in by_prefix.get("IX", []) if s.scenario_id in {"IX.1", "IX.2"}]
     elif machine_id == "nam":
-        chosen = by_prefix.get("III", []) + by_prefix.get("IV", []) + by_prefix.get("VII", []) + [s for s in by_prefix.get("VIII", []) if s.scenario_id in {"VIII.3", "VIII.4", "VIII.5"}]
+        chosen = by_prefix.get("III", []) + by_prefix.get("IV", []) + by_prefix.get("VII", []) + [s for s in by_prefix.get("VIII", []) if s.scenario_id in {"VIII.3", "VIII.4", "VIII.5"}] + [s for s in by_prefix.get("IX", []) if s.scenario_id in {"IX.5", "IX.6"}]
     else:
         raise ValueError("machine-id must be one of: hien, huy, nam")
 
