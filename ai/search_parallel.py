@@ -59,8 +59,6 @@ def _run_mcts_worker_task(task: MCTSWorkerTask) -> Dict[str, Tuple[float, int]]:
         use_heuristic_engine,
     ) = task
 
-    print(f"[MCTSWorker] heuristic_engine={use_heuristic_engine}", flush=True)
-
     if use_heuristic_engine:
         # Local import avoids a module-level cycle with ai.mcts_heuristic importing this module.
         from ai.mcts_heuristic import MCTS, MCTSNode

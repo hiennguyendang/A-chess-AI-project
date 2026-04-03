@@ -23,6 +23,7 @@ from ai.alphabeta import AlphaBetaAI
 from ai.mcts import MCTS as StandardMCTS
 from ai.mcts_heuristic import MCTS as HeuristicMCTS
 from ai.minimax import MinimaxAI
+from benchmark.distributed_benchmark_ui import maybe_create_monitor
 from engine.board import Board
 from engine.Rating_AI import configure_uci_strength, find_stockfish_executable, choose_uci_move
 
@@ -295,6 +296,7 @@ def run_scenario(
     minimax_processes: int,
     mcts_threads: int,
     on_game_done=None,
+    monitor=None,
 ) -> int:
     random.seed(seed)
     rows: List[Dict[str, str]] = []
@@ -336,6 +338,16 @@ def run_scenario(
         sf_elo = sf_side_specs[0].stockfish_elo if sf_side_specs else None
 
         try:
+            if monitor is not None:
+                monitor.on_game_start(
+                    scenario.scenario_id,
+                    game_idx,
+                    scenario.games,
+                    white_spec.kind,
+                    black_spec.kind,
+                )
+                monitor.on_move(board, plies)
+
             if sf_side_specs:
                 if stockfish_path is None:
                     raise RuntimeError("Stockfish path is required for stockfish scenarios")
@@ -360,6 +372,9 @@ def run_scenario(
 
                 board.push(move)
                 plies += 1
+
+                if monitor is not None:
+                    monitor.on_move(board, plies)
 
                 curr_balance = material_balance_cp(board)
                 min_balance = min(min_balance, curr_balance)
@@ -410,6 +425,9 @@ def run_scenario(
             }
             rows.append(row)
 
+            if monitor is not None:
+                monitor.on_game_finish(board)
+
             if on_game_done is not None:
                 on_game_done(game_idx, scenario.games)
         finally:
@@ -437,6 +455,11 @@ def main() -> None:
         "--skip-existing-scenarios",
         action="store_true",
         help="Skip scenario if its output CSV already exists",
+    )
+    parser.add_argument(
+        "--show-ui",
+        action="store_true",
+        help="Show a live board window for the currently running benchmark game",
     )
     args = parser.parse_args()
 
@@ -488,59 +511,65 @@ def main() -> None:
     print(f"Machine={args.machine_id} | Scenarios={len(assigned)} | Planned games={total_games}")
 
     run_started = time.perf_counter()
+    monitor = maybe_create_monitor(args.show_ui)
     completed = 0
-    for idx, sc in enumerate(assigned, start=1):
-        out_csv = out_dir / scenario_output_name(sc.scenario_id)
-        if args.skip_existing_scenarios and out_csv.exists():
-            print(f"[{idx}/{len(assigned)}] Skipping {sc.scenario_id} (existing file: {out_csv.name})")
-            continue
+    try:
+        for idx, sc in enumerate(assigned, start=1):
+            out_csv = out_dir / scenario_output_name(sc.scenario_id)
+            if args.skip_existing_scenarios and out_csv.exists():
+                print(f"[{idx}/{len(assigned)}] Skipping {sc.scenario_id} (existing file: {out_csv.name})")
+                continue
 
-        sc_started = time.perf_counter()
-        print(f"[{idx}/{len(assigned)}] Running {sc.scenario_id} ({sc.games} games)")
+            sc_started = time.perf_counter()
+            print(f"[{idx}/{len(assigned)}] Running {sc.scenario_id} ({sc.games} games)")
 
-        def _on_game_done(game_idx: int, game_total: int) -> None:
-            nonlocal completed
-            sc_elapsed_now = time.perf_counter() - sc_started
-            total_elapsed_now = time.perf_counter() - run_started
-            done_total_now = completed + game_idx
-            left_total_now = max(0, total_games - done_total_now)
-            sec_per_game = (total_elapsed_now / done_total_now) if done_total_now > 0 else 0.0
-            eta_now = sec_per_game * left_total_now
-            print(
-                f"    game {game_idx}/{game_total} | "
-                f"scenario_elapsed={format_duration(sc_elapsed_now)} | "
-                f"total_elapsed={format_duration(total_elapsed_now)} | "
-                f"ETA={format_duration(eta_now)}"
+            def _on_game_done(game_idx: int, game_total: int) -> None:
+                nonlocal completed
+                sc_elapsed_now = time.perf_counter() - sc_started
+                total_elapsed_now = time.perf_counter() - run_started
+                done_total_now = completed + game_idx
+                left_total_now = max(0, total_games - done_total_now)
+                sec_per_game = (total_elapsed_now / done_total_now) if done_total_now > 0 else 0.0
+                eta_now = sec_per_game * left_total_now
+                print(
+                    f"    game {game_idx}/{game_total} | "
+                    f"scenario_elapsed={format_duration(sc_elapsed_now)} | "
+                    f"total_elapsed={format_duration(total_elapsed_now)} | "
+                    f"ETA={format_duration(eta_now)}"
+                )
+
+            n = run_scenario(
+                sc,
+                out_dir=out_dir,
+                stockfish_path=stockfish_path,
+                move_time_ms=max(1, args.move_time_ms),
+                max_plies=max(20, args.max_plies),
+                seed=args.seed + idx,
+                alphabeta_processes=max(1, args.alphabeta_processes),
+                minimax_processes=max(1, args.minimax_processes),
+                mcts_threads=max(1, args.mcts_threads),
+                on_game_done=_on_game_done,
+                monitor=monitor,
             )
+            completed += n
+            sc_elapsed = time.perf_counter() - sc_started
+            total_elapsed = time.perf_counter() - run_started
 
-        n = run_scenario(
-            sc,
-            out_dir=out_dir,
-            stockfish_path=stockfish_path,
-            move_time_ms=max(1, args.move_time_ms),
-            max_plies=max(20, args.max_plies),
-            seed=args.seed + idx,
-            alphabeta_processes=max(1, args.alphabeta_processes),
-            minimax_processes=max(1, args.minimax_processes),
-            mcts_threads=max(1, args.mcts_threads),
-            on_game_done=_on_game_done,
-        )
-        completed += n
-        sc_elapsed = time.perf_counter() - sc_started
-        total_elapsed = time.perf_counter() - run_started
+            games_done = completed
+            games_left = max(0, total_games - games_done)
+            avg_sec_per_game = (total_elapsed / games_done) if games_done > 0 else 0.0
+            eta_sec = avg_sec_per_game * games_left
 
-        games_done = completed
-        games_left = max(0, total_games - games_done)
-        avg_sec_per_game = (total_elapsed / games_done) if games_done > 0 else 0.0
-        eta_sec = avg_sec_per_game * games_left
-
-        print(
-            "  -> wrote "
-            f"{n} rows | cumulative={completed} | "
-            f"scenario_elapsed={format_duration(sc_elapsed)} | "
-            f"total_elapsed={format_duration(total_elapsed)} | "
-            f"ETA={format_duration(eta_sec)}"
-        )
+            print(
+                "  -> wrote "
+                f"{n} rows | cumulative={completed} | "
+                f"scenario_elapsed={format_duration(sc_elapsed)} | "
+                f"total_elapsed={format_duration(total_elapsed)} | "
+                f"ETA={format_duration(eta_sec)}"
+            )
+    finally:
+        if monitor is not None:
+            monitor.close()
 
     total_elapsed = time.perf_counter() - run_started
     print(f"Done. Total rows written: {completed} | total_runtime={format_duration(total_elapsed)}")
