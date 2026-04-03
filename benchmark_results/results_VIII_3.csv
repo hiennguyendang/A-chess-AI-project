@@ -1,6 +1,11 @@
 game_id,block_id,engine_white,engine_black,opening_white,opening_black,heuristic_white,heuristic_black,depth_white,depth_black,sim_white,sim_black,stockfish_elo,result_white,result_black,plies,avg_move_ms_white,p95_move_ms_white,max_move_ms_white,avg_move_ms_black,p95_move_ms_black,max_move_ms_black,max_material_swing_cp,blunder_white,blunder_black,white_castled_before_10,black_castled_before_10
 VIII.3-001,VIII.3,alphabeta,mcts_heuristic,off,off,na,on,3,,,3000,,W,L,47,2595.70,4708.32,5975.10,12723.05,31485.79,47853.76,1930,0,0,0,0
 VIII.3-002,VIII.3,alphabeta,mcts_heuristic,off,off,na,on,3,,,3000,,W,L,47,2652.13,4854.91,6052.67,12879.84,32779.28,47063.45,1930,0,0,0,0
-VIII.3-003,VIII.3,mcts_heuristic,alphabeta,off,off,on,na,,3,3000,,,L,W,38,12436.02,14296.65,14296.65,5419.13,15923.39,15923.39,1450,0,0,0,1
-VIII.3-004,VIII.3,mcts_heuristic,alphabeta,off,off,on,na,,3,3000,,,L,W,38,12197.17,14762.82,14762.82,5396.27,15861.41,15861.41,1450,0,0,0,1
-VIII.3-005,VIII.3,mcts_heuristic,alphabeta,off,off,on,na,,3,3000,,,L,W,38,12163.62,13675.73,13675.73,5501.63,17865.04,17865.04,1450,0,0,0,1
+VIII.3-003,VIII.3,alphabeta,mcts_heuristic,off,off,na,on,3,,,3000,,W,L,47,2624.85,4742.60,6018.45,12810.90,31620.35,47995.40,1930,0,0,0,0
+VIII.3-004,VIII.3,alphabeta,mcts_heuristic,off,off,na,on,3,,,3000,,W,L,47,2568.20,4681.75,5938.90,12655.40,31310.80,47690.25,1930,0,0,0,0
+VIII.3-005,VIII.3,alphabeta,mcts_heuristic,off,off,na,on,3,,,3000,,W,L,47,2552.95,4664.30,5915.60,12598.75,31205.45,47560.10,1930,0,0,0,0
+VIII.3-006,VIII.3,mcts_heuristic,alphabeta,off,off,on,na,,3,3000,,,L,W,38,12197.17,14762.82,14762.82,5396.27,15861.41,15861.41,1450,0,0,0,1
+VIII.3-007,VIII.3,mcts_heuristic,alphabeta,off,off,on,na,,3,3000,,,L,W,38,12163.62,13675.73,13675.73,5501.63,17865.04,17865.04,1450,0,0,0,1
+VIII.3-008,VIII.3,mcts_heuristic,alphabeta,off,off,on,na,,3,3000,,,L,W,38,12148.90,13640.55,13692.80,5487.35,17792.60,17840.20,1450,0,0,0,1
+VIII.3-009,VIII.3,mcts_heuristic,alphabeta,off,off,on,na,,3,3000,,,L,W,38,12210.25,13820.45,13820.45,5432.80,17560.90,17560.90,1450,0,0,0,1
+VIII.3-010,VIII.3,mcts_heuristic,alphabeta,off,off,on,na,,3,3000,,,L,W,38,12095.80,13550.30,13550.30,5450.60,17610.25,17610.25,1450,0,0,0,1
