@@ -27,7 +27,7 @@ from benchmark.distributed_benchmark_ui import maybe_create_monitor
 from engine.board import Board
 from engine.Rating_AI import configure_uci_strength, find_stockfish_executable, choose_uci_move
 
-TOTAL_RUNTIME_LIMIT_SECONDS = 6 * 60 * 60
+TOTAL_RUNTIME_LIMIT_SECONDS = 10 * 60 * 60
 
 
 CSV_HEADER = [
@@ -211,6 +211,7 @@ def build_all_scenarios() -> List[MatchScenario]:
     # I. AlphaBeta - Khong Opening
     scenarios.append(MatchScenario("I.1", 10, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("random")))
     scenarios.append(MatchScenario("I.2.d3", 10, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("minimax", depth=3)))
+    scenarios.append(MatchScenario("I.2.d5", 1, EngineSpec("alphabeta", opening="off", depth=5), EngineSpec("minimax", depth=5)))
     for elo in range(100, 1201, 100):
         scenarios.append(MatchScenario(f"I.3.d3.elo{elo}", 2, EngineSpec("alphabeta", opening="off", depth=3), EngineSpec("stockfish", stockfish_elo=elo)))
 
