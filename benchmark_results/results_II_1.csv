@@ -1,0 +1,11 @@
+game_id,block_id,engine_white,engine_black,opening_white,opening_black,heuristic_white,heuristic_black,depth_white,depth_black,sim_white,sim_black,stockfish_elo,result_white,result_black,plies,avg_move_ms_white,p95_move_ms_white,max_move_ms_white,avg_move_ms_black,p95_move_ms_black,max_move_ms_black,max_material_swing_cp,blunder_white,blunder_black,white_castled_before_10,black_castled_before_10
+II.1-001,II.1,alphabeta,random,on,na,na,na,3,,,,,W,L,25,2520.50,6673.63,6673.63,0.09,0.13,0.13,2050,0,0,1,0
+II.1-002,II.1,alphabeta,random,on,na,na,na,3,,,,,W,L,37,2970.29,7738.92,7738.92,0.09,0.14,0.14,2250,0,0,1,0
+II.1-003,II.1,alphabeta,random,on,na,na,na,3,,,,,W,L,21,2012.69,11026.02,11026.02,0.08,0.10,0.10,1030,0,0,1,0
+II.1-004,II.1,alphabeta,random,on,na,na,na,3,,,,,W,L,23,2078.89,5817.47,5817.47,0.11,0.16,0.16,1930,0,0,1,0
+II.1-005,II.1,alphabeta,random,on,na,na,na,3,,,,,W,L,41,6813.71,18340.23,21620.07,0.09,0.12,0.15,2270,0,0,1,0
+II.1-006,II.1,random,alphabeta,na,on,na,na,,3,,,,L,W,38,0.11,0.16,0.16,2993.96,14336.42,14336.42,3080,0,0,0,1
+II.1-007,II.1,random,alphabeta,na,on,na,na,,3,,,,L,W,28,0.11,0.14,0.14,4948.90,32744.15,32744.15,1000,0,0,0,1
+II.1-008,II.1,random,alphabeta,na,on,na,na,,3,,,,L,W,56,0.09,0.12,0.13,3003.93,8418.01,13208.78,2880,0,0,0,1
+II.1-009,II.1,random,alphabeta,na,on,na,na,,3,,,,L,W,44,0.09,0.13,0.15,1192.96,3001.76,3827.65,2960,0,0,0,1
+II.1-010,II.1,random,alphabeta,na,on,na,na,,3,,,,L,W,38,0.10,0.18,0.18,2149.36,12320.58,12320.58,2350,0,0,0,1
