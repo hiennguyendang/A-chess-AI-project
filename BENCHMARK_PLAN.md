@@ -242,7 +242,7 @@ Tham số bổ sung (tuỳ chọn):
 - `--minimax-processes 6`
 - `--mcts-threads 6`
 
-Lưu ý công bằng khi đo tốc độ:
+Lưu ý công bằng khi đo tố độ:
 - Nếu so sánh tốc độ giữa các thuật toán, giữ cố định các cờ song song ở mọi máy và mọi lần chạy.
 - Không chạy nhiều benchmark cùng lúc trên cùng 1 máy khi đang đo thời gian, vì sẽ làm nhiễu chỉ số time.
 

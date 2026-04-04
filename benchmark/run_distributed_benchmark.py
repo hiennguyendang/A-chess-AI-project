@@ -263,11 +263,11 @@ def assign_scenarios(machine_id: str, scenarios: List[MatchScenario]) -> List[Ma
         by_prefix.setdefault(prefix, []).append(sc)
 
     if machine_id == "hien":
-        chosen = by_prefix.get("I", []) + by_prefix.get("V", []) + [s for s in by_prefix.get("VIII", []) if s.scenario_id == "VIII.1"] + [s for s in by_prefix.get("IX", []) if s.scenario_id in {"IX.3", "IX.4"}]
+        chosen = by_prefix.get("I", []) + by_prefix.get("V", []) + [s for s in by_prefix.get("VIII", []) if s.scenario_id == "VIII.1"]
     elif machine_id == "huy":
-        chosen = by_prefix.get("II", []) + by_prefix.get("VI", []) + [s for s in by_prefix.get("VIII", []) if s.scenario_id == "VIII.2"] + [s for s in by_prefix.get("IX", []) if s.scenario_id in {"IX.1", "IX.2"}]
+        chosen = by_prefix.get("II", []) + by_prefix.get("VI", []) + [s for s in by_prefix.get("VIII", []) if s.scenario_id == "VIII.2"]
     elif machine_id == "nam":
-        chosen = by_prefix.get("III", []) + by_prefix.get("IV", []) + by_prefix.get("VII", []) + [s for s in by_prefix.get("VIII", []) if s.scenario_id in {"VIII.3", "VIII.4", "VIII.5"}] + [s for s in by_prefix.get("IX", []) if s.scenario_id in {"IX.5", "IX.6"}]
+        chosen = by_prefix.get("III", []) + by_prefix.get("IV", []) + by_prefix.get("VII", []) + [s for s in by_prefix.get("VIII", []) if s.scenario_id in {"VIII.3", "VIII.4", "VIII.5"}]
     else:
         raise ValueError("machine-id must be one of: hien, huy, nam")
 
