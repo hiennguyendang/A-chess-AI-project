@@ -1,24 +1,19 @@
 # Chess AI Project (Alpha-Beta and MCTS)
 
-This project is a desktop chess application with a PyQt5 interface and two AI engines:
+Desktop chess application with a PyQt5 UI and two AI engines:
 
-1. Alpha-Beta (Minimax with pruning)
+1. Alpha-Beta (minimax with pruning)
 2. Monte Carlo Tree Search (MCTS)
 
-It supports human play, AI vs AI automation, and 10-board benchmark windows for quick engine comparison.
+The app supports human play, AI vs AI automation, and benchmark windows for quick engine comparison.
 
-## Highlights
+## Features
 
-1. Full legal chess gameplay with move validation and check/checkmate/stalemate detection
-2. Two AI engines: Alpha-Beta and MCTS
-3. Layered UI flow:
-   1. Step 1: choose game mode
-   2. Step 2: mode-specific options
-   3. In-game: board + status + move history
-4. AI vs AI with separate depth control for White and Black
-5. 10-game benchmark windows for:
-   1. Minimax vs Random
-   2. MCTS vs Random
+1. Full legal chess rules (move validation, check, checkmate, stalemate)
+2. Selectable AI engine: Alpha-Beta or MCTS
+3. Human vs AI and AI vs AI game modes
+4. Separate AI depth controls for White and Black in AI vs AI mode
+5. Built-in benchmark modes (10-game windows)
 
 ## Project Structure
 
@@ -27,7 +22,11 @@ A-chess-AI-project/
   ai/
     alphabeta.py
     mcts.py
+    mcts_evaluator.py
+    mcts_heuristic.py
     minimax.py
+    opening_book.py
+    search_parallel.py
     utils.py
   config/
     settings.py
@@ -35,25 +34,32 @@ A-chess-AI-project/
     board.py
     evaluator.py
     move_generator.py
+    Rating_AI.py
     rules.py
   gui/
     app.py
     benchmark_window.py
     board_ui.py
     themes.py
+  imgs/
+    piece/
+      *.png
+  results/
+    merged_results.csv
+    summary_by_block.csv
   tests/
     test_ai.py
-    test_ai_vs_random.py
   main.py
+  README.md
   requirements.txt
 ```
 
 ## Requirements
 
-1. Python 3.11+ (Python 3.12 recommended)
+1. Python 3.11 or newer (3.12 recommended)
 2. pip
 
-Dependencies are listed in `requirements.txt`:
+Main dependencies (see requirements.txt):
 
 1. python-chess
 2. PyQt5
@@ -61,91 +67,88 @@ Dependencies are listed in `requirements.txt`:
 
 ## Installation
 
-From the project root:
+Run from the project root.
+
+### 1) Create virtual environment
 
 ```bash
 python -m venv .venv
 ```
 
-### Windows (PowerShell)
+### 2) Activate environment and install dependencies
+
+Windows (PowerShell):
 
 ```bash
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
-### Windows (cmd)
+Windows (cmd):
 
 ```bash
 .venv\Scripts\activate.bat
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
-### macOS/Linux
+macOS/Linux:
 
 ```bash
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
-## Run the Application
+## Run Application
 
 ```bash
 python main.py
 ```
 
-## How to Use
+## Usage
 
-### 1) Start Menu (Mode Selection)
+### 1) Start menu
 
-Choose one of these modes, then click `Continue`:
+Choose one mode, then click Continue:
 
 1. Human vs AI
 2. AI vs AI
 3. Test Alpha-Beta (10 games)
 4. Test Monte Carlo (10 games)
 
-### 2) Options (Mode-Specific)
+### 2) Mode options
 
-The options screen is dynamic and only shows relevant controls.
+Human vs AI:
 
-#### Human vs AI
+1. AI depth
+2. Player side (White/Black)
+3. AI engine (Alpha-Beta/MCTS)
 
-1. AI Depth
-2. Your Side (White/Black)
-3. AI Engine (Alpha-Beta/MCTS)
-
-Click `Start Game`.
-
-#### AI vs AI
+AI vs AI:
 
 1. White AI (Alpha-Beta/MCTS)
-2. White AI Depth
+2. White AI depth
 3. Black AI (Alpha-Beta/MCTS)
-4. Black AI Depth
+4. Black AI depth
 
-Click `Start Game`.
+Test modes:
 
-#### Test Modes
+1. Test Alpha-Beta: benchmark Minimax on 10 boards
+2. Test Monte Carlo: benchmark MCTS on 10 boards
 
-1. Test Alpha-Beta (10 boards): uses selected depth for Minimax benchmark
-2. Test Monte Carlo (10 boards): opens MCTS benchmark window
-
-Click `Open Test`.
-
-### 3) In-Game Screen
-
-You will see:
+### 3) In-game screen
 
 1. Chess board
-2. Status text (`Turn`, `Checkmate`, `Stalemate`)
-3. Move history in SAN format
-4. Control buttons (`Start/Stop AI vs AI`, `Restart Game`, `Back To Menu`)
+2. Status text (turn/checkmate/stalemate)
+3. SAN move history
+4. Control buttons (start/stop AI vs AI, restart, back to menu)
 
 ## Notes
 
-1. Some Windows environments may show Qt EUDC font warnings; this does not block the app.
-2. Performance depends on selected depth/simulations and CPU speed.
+1. On some Windows machines, Qt may print EUDC font warnings; these are non-blocking.
+2. Performance depends on AI depth/simulation settings and CPU speed.
 
 ## License
 

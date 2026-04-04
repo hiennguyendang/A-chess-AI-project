@@ -1,3 +1,0 @@
-game_id,block_id,engine_white,engine_black,opening_white,opening_black,heuristic_white,heuristic_black,depth_white,depth_black,sim_white,sim_black,stockfish_elo,result_white,result_black,plies,avg_move_ms_white,p95_move_ms_white,max_move_ms_white,avg_move_ms_black,p95_move_ms_black,max_move_ms_black,max_material_swing_cp,blunder_white,blunder_black,white_castled_before_10,black_castled_before_10
-VI.1.sim1000.elo300-001,VI.1.sim1000.elo300,mcts_heuristic,stockfish,on,na,on,na,,,1000,,300,L,W,68,2488.50,3689.25,3741.71,101.63,102.68,104.74,1250,0,0,1,0
-VI.1.sim1000.elo300-002,VI.1.sim1000.elo300,stockfish,mcts_heuristic,na,on,na,on,,,,1000,300,W,L,65,97.30,102.52,103.89,1985.65,4020.42,4142.12,1660,0,0,0,1
